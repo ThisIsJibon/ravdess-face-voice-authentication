@@ -1,0 +1,53 @@
+# Experimental implementation protocol
+
+## Frozen components and independent variables
+
+The measured task is verification of a claimed actor identity. Encoders are pretrained and frozen; there is no supervised RAVDESS training split. The enrollment pool creates templates, development recordings select policies, and test recordings measure performance. The roster contains the same 24 identities across all partitions. This is a known-user verification study, not an evaluation of generalization to unseen identities.
+
+RQ1 changes the count of clean enrollment recordings. Data partitions, query recordings, identity claims, encoders, frame positions, audio preprocessing, embedding dimensions, normalization, matcher, and reference development policies remain fixed. Ten seeds vary enrollment choices, with nested prefixes for each count. Both equal-count and independent-modality variations are retained. Recording count is the manipulated variable; recording content necessarily changes when a recording is added, so the seed repetitions characterize this enrollment sampling variation.
+
+RQ2 reuses the clean RQ1 scores to compare face, voice, equal-weight score fusion, and tuned score fusion. Tuning occurs only on clean development scores with 16 enrollment recordings. The same selected weight is retained for every smaller enrollment condition and for degraded probes. Weights are bounded away from 0 and 1 so the tuned alternative actually uses both modalities. A preferred fusion is selected on development EER with a development operating-FRR tie break; both candidates remain available in the saved experiments. Test results never select the fusion.
+
+RQ3 extends these same systems to a factorial noise/blur grid at k=1, 4, and 16. Enrollment remains clean. Audio and face severity change independently and jointly. The strongest configured condition is SNR=0 dB and sigma=4; this is a predefined severity, not a claim that a modality has become unusable. The selected fusion is identified per seed in saved outputs so its robustness can be compared without test selection.
+
+## Audio processing and noise measurement
+
+Read PCM WAV as float32; average channels if needed, remove the recording mean, and resample to 16 kHz with polyphase filtering. Find leading/trailing speech boundaries using 20 ms clean-audio energy frames, a threshold 35 dB below the maximum frame energy, and 100 ms margins. Clean-derived boundaries are reused at every noise level; this experiment does not test a noise-sensitive voice activity detector. No transcript or identity label sets these boundaries.
+
+For each recording, draw one seeded Gaussian noise vector. Rescale it at each SNR so that `SNR = 10 log10(mean(clean^2) / mean(noise^2))` over the retained waveform. The same noise direction is used for each severity. Float audio is not clipped after adding noise. Save the measured SNR against the original clean waveform. The explicit conditions are clean, 20, 10, and 0 dB. At 0 dB, noise and clean signal have equal power under this definition. This is additive synthetic noise, not a model of every phone microphone or environment.
+
+Use SpeechBrain's 80-bin log-mel filterbank, sentence mean normalization without variance normalization, and pretrained ECAPA-TDNN. L2-normalize the 192-dimensional recording embedding. The explicit architecture matches the pinned upstream hyperparameters; the downloaded embedding weights are loaded strictly. The unused classifier and remote YAML are not executed.
+
+## Face processing and blur measurement
+
+Sample three frames at 25%, 50%, and 75% of the clip. Resize each full frame to width 640 with preserved aspect ratio. Detect faces with YuNet, detection threshold 0.8 and NMS threshold 0.3. Select the largest detected box by area, using the dataset's single-actor acquisition setup; this rule is applied to every frame without identity labels. Use SFace alignment to generate 112 x 112 BGR face crops. Record frame indices, detector confidence, number of detected boxes, selection rule, and dimensions. A decoding/zero-detection failure stops extraction and records the failure; samples are not silently removed or replaced with convenient frames. During initial extraction, a small false detection on an actor's hair exposed the need for this rule. Previously successful single-detection embeddings are mathematically unchanged by selecting the largest candidate; their one-time metadata migration preserves embedding bytes and records hashes in `data/cache_migrations.json`.
+
+The clean crops and clean alignment are fixed across blur levels. Apply Gaussian blur independently to each crop, sigma=0, 1, 2, 4 pixels in both axes, using reflected borders and an automatically determined kernel. Measure mean Laplacian variance across crops as a manipulation check. Sigma is the controlled blur magnitude; sharpness is a descriptive observed quantity. This design measures recognition sensitivity to blur after successful acquisition/alignment. It **does not** measure degradation-induced detector failure or performance with inaccurate landmarks.
+
+Extract and normalize 128-dimensional SFace embeddings per crop, average the three, then normalize the recording embedding. Three frames constitute one enrollment recording. Models are for identity matching; expression action units would mainly represent facial movement and were not used as substitutes for identity embeddings.
+
+## Matching, fusion, and policies
+
+Normalize the mean enrollment embedding to produce one template per actor per modality. A probe is compared with all 24 templates. The score for its own actor is genuine; the remaining 23 scores are impostors. A fusion trial always compares the face and voice of the same probe to the face and voice of the same claimed actor.
+
+Convert cosine scores to [0,1] with the fixed affine map `(s+1)/2`. No test statistics fit this transformation. Fixed fusion is `0.5*face + 0.5*voice`; tuned fusion is `w*face + (1-w)*voice`. Development selects w from 0.1,...,0.9 by lowest exact EER, then lowest FRR at empirical development FAR<=0.01, then distance from 0.5. Tuning has no assumed positive outcome.
+
+An operational acceptance is `score >= threshold`. For each enrollment seed, fit every system's thresholds on its clean k=16 development scores. Policies include the empirical closest EER operating point and FAR ceilings 0.01, 0.001, and 0.0001. FAR thresholds are the lowest observed development ROC thresholds that obey the ceiling, including ties as a group. Freeze thresholds over all enrollment sizes and test degradation levels. Actual test FAR may exceed its development target, and both FAR and FRR are reported.
+
+The test-set ROC EER and oracle test FRR at constrained FAR are descriptive separability metrics. They are clearly separated from operational thresholds, and the CLI only uses saved development policies.
+
+## Metrics and uncertainty
+
+Reuse the submitted `Homeworks/hw3_submission.zip` evaluator without changing its bytes. All conditions call its original d-prime and EER methods; sorted-array threshold counts accelerate its loop with exact parity tests. Save its 500-threshold EER estimate as `hw3_eer` and a supplementary interpolated empirical ROC EER as `eer`. Generate the original HW3 score-distribution, ROC, and DET plots for representative conditions. Also provide directly comparable multi-system scientific figures.
+
+Other outputs include AUC, genuine/impostor means, confusion counts, operational FAR/FRR/GAR (=1-FRR), oracle test FRR at constrained FAR, per-user errors, and seed mean/std/min/max. Seed shading is the observed minimum-to-maximum range, not a 95% population interval. Interpolated EER may reflect a mixture between two empirical ROC points rather than an attainable single decision threshold.
+
+Paired bootstrap intervals compare FRR differences at frozen development FAR=0.01 thresholds. First average each probe actor's FRR across the ten enrollment seeds, then resample the 24 probe actors with replacement 1,000 times and take the 2.5th/97.5th percentiles. This preserves probe-actor clustering and pairing between systems. It is conditional on the fixed enrollment/claim roster; it does not model all possible changes in impostor identity or population recruitment. No multiple-testing-adjusted significance claims are made.
+
+There are 11,040 impostor scores and 480 genuine scores per condition. FAR resolution is 1/11,040. The nominal independent-binomial one-sided 95% upper reference bound for zero false accepts is approximately 0.000271, which already exceeds 0.0001; correlated biometric trials make independence-based certification even less defensible. `zero_error_binomial_upper95_reference` is always the hypothetical zero-error reference, not a confidence bound on an observed nonzero error rate. Never multiply test counts by ten seeds to claim more independent evidence.
+
+## Local handling and implementation limits
+
+Raw recordings, identity templates, and scores remain on this computer; only public model files are downloaded. No live individuals are identified, and no public endpoint is created. Avoid committing raw biometric data or templates; generated data/models/results are in `.gitignore`. Local storage and access follow the computer's existing protections: the project does not claim to implement encryption at rest or production template protection.
+
+No spoofing detector, replay defense, on-device application, deployment security evaluation, cross-session experiment, or demographic fairness validation is implemented. These are limits of scope, not negative experimental results. The instructor-approved dataset consists of 24 professional actors in controlled acted-emotion recordings; it is too small and unrepresentative for population claims. The approved research questions and assignment description require an experimental multimodal authentication system, not a phone application.

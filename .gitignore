@@ -1,0 +1,27 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+RAVDESS/
+Homeworks/
+data/
+models/
+results/
+*.zip
+
+# Local secrets and machine-specific files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+*.tmp
+~$*
+# Local course materials and generated reports
+Project_Description.pdf
+docs/*.docx

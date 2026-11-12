@@ -1,0 +1,16 @@
+dataset_dir: RAVDESS
+data_dir: data
+model_dir: models
+results_dir: results/full
+split_seed: 73
+enrollment_seeds: [73, 101, 211, 307, 401, 503, 601, 701, 809, 907]
+enrollment_sizes: [1, 2, 4, 8, 12, 16]
+degradation_enrollment_sizes: [1, 4, 16]
+audio_snr_db: [null, 20, 10, 0]
+face_blur_sigma: [0, 1, 2, 4]
+frame_fractions: [0.25, 0.5, 0.75]
+far_targets: [0.01, 0.001, 0.0001]
+face_weight_candidates: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+device: auto
+torch_threads: 4
+bootstrap_replicates: 1000
