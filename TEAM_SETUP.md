@@ -2,20 +2,17 @@
 
 Recommended repository name: `ravdess-face-voice-authentication`.
 
-## 1. Clone the repository
+## 1. Choose how to work
 
-Install Git and Python 3.11. Clone your team's repository, then open a terminal in its root:
+Contribute directly on GitHub using a branch and pull request. You do not need to clone the repository or install Git to edit files this way. Follow section 7 for the contribution workflow. The repository owner reviews and merges pull requests.
 
-```text
-git clone https://github.com/YOUR-OWNER/ravdess-face-voice-authentication.git
-cd ravdess-face-voice-authentication
-```
+Sections 2-6 are optional local execution instructions. To run experiments on your computer without cloning, select the branch you want to test on GitHub, download its source ZIP from the repository's Code menu, extract it, and open a terminal in the extracted folder containing `pyproject.toml`. Install Python 3.11 and create your own environment using the instructions below. Do not copy another person's `.venv`.
 
-Do not copy another person's `.venv`. Every teammate creates their own environment.
+A downloaded ZIP is a local snapshot. Changes made inside it do not automatically update GitHub. Edit the corresponding files on your GitHub branch or deliberately upload your changed source files to that branch before opening your pull request.
 
 ## 2. Add the dataset
 
-Create `RAVDESS` directly inside the cloned repository. Keep these 25 original ZIP archives in it, without extracting them manually:
+Create `RAVDESS` directly inside the extracted project folder. Keep these 25 original ZIP archives in it, without extracting them manually:
 
 ```text
 ravdess-face-voice-authentication/
@@ -127,15 +124,33 @@ git push -u origin main
 
 Review the staged files before committing. Dataset archives, extracted data, embeddings, templates, model weights, environments, homework archives and generated results should not appear. Ignore rules do not remove files that were already tracked. If this is an existing Git repository, inspect its current branch and remotes instead of blindly repeating initialization or adding an existing remote.
 
-In GitHub repository settings, invite teammates as collaborators with write access. Each teammate should use a branch and pull request:
+### Owner setup
 
-```text
-git pull origin main
-git switch -c feature/short-description
-# Make and test changes.
-git add PATHS-YOU-CHANGED
-git commit -m "Describe the change"
-git push -u origin feature/short-description
-```
+After the initial project upload, invite teammates as collaborators with write access through the repository settings. Teammates accept the invitation before contributing. Configure protection for `main` to require pull requests and owner review where your GitHub plan supports it. The team rule is that only the repository owner merges into `main`.
 
-Open a pull request into `main` and request review. Agree on one experiment configuration before comparing results. Share selected result tables through pull requests only if deliberately chosen; generated results are ignored by default. Do not commit credentials, biometric templates or raw recordings.
+### Teammate workflow in the browser
+
+1. Open the owner's repository on GitHub and select `main` in the branch selector.
+2. Create a new branch from the current `main`, using a descriptive name such as `feature/noise-analysis` or `fix/metric-labels`. Use a separate branch for each task.
+3. Confirm the branch selector shows your new branch before changing files.
+4. Open the source or documentation file you want to change and select the edit action. Make your changes and preview Markdown when appropriate. For new files, use the repository's add-file action. You can also upload deliberately selected source files changed in a downloaded snapshot.
+5. Commit the changes to your feature branch with a clear message. Repeat for other files belonging to the same task. Do not commit directly to `main`.
+6. Test changes when possible. For local testing without cloning, download the latest ZIP of your feature branch and follow sections 2-6. Do not claim tests passed unless you ran them. State clearly in the pull request if changes were not tested.
+7. Open a pull request with `main` as the base and your feature branch as the compare branch, both in the owner's repository.
+8. Give the pull request a descriptive title. Explain what changed, why, how you tested it, and any effect on experiment configuration or existing results.
+9. Review the Files changed view and request review from the repository owner. Check that the pull request contains only your intended changes.
+10. Address review comments by editing and committing to the same branch. The existing pull request updates automatically. The owner handles approval and merging; teammates should not merge their own pull requests.
+11. After the owner merges, create your next task branch from the updated `main`.
+
+### Files to keep out of GitHub
+
+Do not upload `RAVDESS/`, `data/`, `models/`, `results/`, `.venv/`, homework archives, raw recordings, biometric embeddings/templates, credentials, or an entire extracted project folder. Upload only the source or documentation files needed for your change.
+
+The web upload workflow requires manual file selection. Do not rely on the local `.gitignore` to screen files you select in the browser. If an unexpected file appears in the pull request, remove it from the branch before requesting review.
+
+Agree on one experiment configuration before comparing results. Share selected result tables only when the owner explicitly wants them included. Coordinate edits to shared configuration files to avoid conflicting experiment settings. If GitHub reports a merge conflict that you cannot resolve confidently, leave the pull request open and ask the owner to help.
+
+### GitHub documentation
+
+- Editing files: https://docs.github.com/en/repositories/working-with-files/managing-files/editing-files
+- Creating pull requests: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request
