@@ -65,10 +65,10 @@ class Embedding:
     """z-score the features, then optionally apply LDA.
 
     z-score: subtract the mean and divide by the standard deviation, so every
-    feature has the same scale. LDA (Linear Discriminant Analysis) then finds the
-    directions where different people are far apart and the same person's
-    recordings are close together. This helps ignore what the actor is saying
-    or which emotion they show.
+    feature has the same scale. LDA (Linear Discriminant Analysis) then uses the
+    actor labels of the enrollment recordings to find feature combinations that
+    help tell people apart: different people far apart, the same person's
+    recordings close together.
     """
 
     def __init__(self, lda_dims=0, shrinkage=0.0):
