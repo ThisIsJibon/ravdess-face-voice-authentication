@@ -63,6 +63,8 @@ def main():
         sub.add_parser(command)
     extract_parser = sub.add_parser("extract")
     extract_parser.add_argument("--limit",type=int,help="Extraction smoke test only; cannot evaluate an incomplete dataset")
+    t = sub.add_parser("tracking",help="Facial-tracking (AU + landmark) study; run after 'all'")
+    t.add_argument("--refresh",action="store_true",help="Re-extract tracking features from the archive")
     v = sub.add_parser("verify")
     v.add_argument("--recording",help="Held-out recording identifier from data/manifest.csv")
     v.add_argument("--audio",help="External WAV probe (use with --video)")
@@ -94,6 +96,12 @@ def main():
         print(json.dumps(result,indent=2))
         if not result["passed"]:
             raise SystemExit(1)
+    if args.command == "tracking":
+        from .tracking import extract_tracking
+        from .tracking_eval import run_tracking
+        if args.refresh:
+            extract_tracking(config)
+        run_tracking(config)
     if args.command == "verify":
         if bool(args.recording) == bool(args.audio and args.video):
             parser.error("Provide either --recording or both --audio and --video")
