@@ -32,6 +32,8 @@ You need the audio speech archive and all 24 video speech archives. Audio alone 
 
 Dataset source: https://doi.org/10.5281/zenodo.1188976
 
+To also run the AU and landmark study, download `FacialTracking_Actors_01-24.zip` from the tracking release (https://zenodo.org/records/3255102) and place it in the same `RAVDESS/` folder. Keep it zipped. See [docs/TRACKING_STUDY.md](docs/TRACKING_STUDY.md).
+
 Observe the dataset's CC BY-NC-SA 4.0 terms and attribution requirements. Download data locally instead of uploading it into GitHub. Allow substantial free disk space for the archives, extracted videos, Python environment and models.
 
 ## 3. Install on Windows
