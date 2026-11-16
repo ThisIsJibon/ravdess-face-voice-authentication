@@ -131,8 +131,10 @@ def write_report(config):
         spread = "" if pd.isna(row.std) else percent(row.std)
         lines_md.append(f"| {row.control} | {row.system} | {percent(row.mean)} | {spread} |")
     lines_md += ["",
-                 "- shuffled_labels: probe identities scrambled, so about 50% is expected.",
-                 "- unseen_actors_raw / _lda: z-score and LDA learned on 12 actors, tested on the other 12 (20 random splits).",
+                 "Controls use the interpolated ROC EER and the first enrollment seed (not the 10-seed HW3 EER above).",
+                 "- shuffled_labels: probe identities scrambled; scores should fall to chance (about 50%).",
+                 "- unseen_actors_raw / _lda: actors excluded from LDA fitting. z-score and LDA learned on 12 actors, tested on the other 12 "
+                 "(20 random splits). LDA settings were chosen earlier on dev data from all 24 actors.",
                  "- same/different_content_pairs: pairs of test recordings with the same or a different sentence + emotion."]
     (out / "REPORT.md").write_text("\n".join(lines_md) + "\n", encoding="utf-8")
     print(f"Wrote {out / 'REPORT.md'} and 3 figures", flush=True)

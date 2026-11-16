@@ -99,6 +99,23 @@ class Embedding:
         return "raw" if not self.lda_dims else f"lda_d{self.lda_dims}_s{self.shrinkage:g}"
 
 
+def check_trial_index(path, probes, actors, genuine):
+    """Stop if a saved trial index does not match our probes, claims and labels.
+
+    Fusion averages our scores with the saved face/voice scores cell by cell, so
+    row i must be the same recording and column j the same claimed actor in both.
+    """
+    with np.load(path, allow_pickle=False) as saved:
+        if list(saved["probe_recording_ids"]) != list(probes.recording_id):
+            raise ValueError(f"{path.name}: probe recordings differ from the main study")
+        if not np.array_equal(saved["probe_actors"], probes.actor.to_numpy()):
+            raise ValueError(f"{path.name}: probe actors differ from the main study")
+        if not np.array_equal(saved["claim_actors"], actors):
+            raise ValueError(f"{path.name}: claimed actors differ from the main study")
+        if not np.array_equal(np.ravel(saved["genuine"]), genuine.ravel()):
+            raise ValueError(f"{path.name}: genuine/impostor labels differ from the main study")
+
+
 def average_over_seeds(rows, group_by):
     """Mean / std / min / max of each metric over the 10 seeds."""
     table = pd.DataFrame(rows).groupby(group_by)[METRICS].agg(["mean", "std", "min", "max"]).reset_index()
@@ -133,9 +150,8 @@ def run_tracking(config):
     genuine_test = test.actor.to_numpy()[:, None] == actors[None, :]
 
     # --- Check we use exactly the same trials and enrollments as face/voice --------
-    trials = np.load(main_results / "trial_index.npz")
-    assert list(trials["probe_recording_ids"]) == list(test.recording_id), "test probes differ from main study"
-    assert np.array_equal(trials["claim_actors"], actors), "claimed actors differ from main study"
+    check_trial_index(main_results / "trial_index.npz", test, actors, genuine_test)
+    check_trial_index(main_results / "development_trial_index.npz", dev, actors, genuine_dev)
     seeds, sizes = config["enrollment_seeds"], config["enrollment_sizes"]
     orders = {seed: enrollment_order(manifest, seed) for seed in seeds}
     for seed in seeds:
@@ -214,6 +230,9 @@ def run_tracking(config):
     for seed in seeds:
         saved_dev = np.load(main_results / "development_scores" / f"{seed}.npz")
         dev_scores = {"face": saved_dev["face"], "voice": saved_dev["voice"]}
+        for system in ("face", "voice"):
+            if dev_scores[system].shape != genuine_dev.shape:
+                raise ValueError(f"saved dev {system} scores for seed {seed} have the wrong shape")
         for system, E in tracking_systems.items():
             dev_scores[system] = score_matrix(E, row_of, dev.recording_id, orders[seed], reference_k)
         for combo in combos:
@@ -225,6 +244,8 @@ def run_tracking(config):
             # Face and voice test scores saved by the main study (noise is on the probe audio only).
             saved = np.load(main_results / "trial_scores" / str(seed) / f"kf{k}_kv{k}_{audio_key(snr)}_face_sigma0.npz")
             scores = {"face": saved["face"], "voice": saved["voice"]}
+            if scores["face"].shape != genuine_test.shape or scores["voice"].shape != genuine_test.shape:
+                raise ValueError(f"saved test scores for seed {seed}, k = {k} have the wrong shape")
             for system, E in tracking_systems.items():
                 scores[system] = score_matrix(E, row_of, test.recording_id, orders[seed], k)
             for combo in combos:
@@ -248,8 +269,9 @@ def run_tracking(config):
         controls.append({"control": "shuffled_labels", "system": system,
                          "eer": eer(s, shuffled_actor[:, None] == actors[None, :])})
 
-    # 2) New people: learn z-score + LDA on 12 actors, test on the other 12 actors.
-    #    This shows how much of the LDA gain works for people LDA has never seen.
+    # 2) Actors excluded from LDA fitting: learn z-score + LDA on 12 actors, test on
+    #    the other 12. Shows how much of the LDA gain is learning these particular actors.
+    #    Note: the LDA settings (pick) were chosen earlier on dev data from all 24 actors.
     for system, feature_set in [("au", "au_all"), ("tracking", best_set)]:
         X, pick = feature_sets[feature_set], chosen[feature_set]
         for split in range(settings["unseen_actor_splits"]):

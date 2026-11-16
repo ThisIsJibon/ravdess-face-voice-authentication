@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from mbproject.tracking import AU_COLUMNS, SHAPE_COLUMNS, X_COLUMNS, Y_COLUMNS, normalize_landmarks, summarize_recording
-from mbproject.tracking_eval import Embedding
+from mbproject.tracking_eval import Embedding, check_trial_index
 
 
 def fake_tracking_csv(frames=40, confidence=0.95, seed=0):
@@ -60,3 +60,19 @@ def test_embedding_only_learns_from_training_data():
     assert np.allclose(model.transform(X[60:]), before)
     # LDA gives at most (people - 1) = 2 dimensions for 3 training actors.
     assert model.transform(X).shape == (120, 2)
+
+
+def test_misordered_trial_index_stops_the_run(tmp_path):
+    # If the saved face/voice rows were in a different order, fusion would add up
+    # scores of different recordings. The check must catch a swap of two rows.
+    probes = pd.DataFrame({"recording_id": ["a", "b", "c"], "actor": [1, 2, 3]})
+    actors = np.array([1, 2, 3])
+    genuine = probes.actor.to_numpy()[:, None] == actors[None, :]
+    path = tmp_path / "development_trial_index.npz"
+    np.savez(path, probe_recording_ids=np.array(["a", "b", "c"]), probe_actors=np.array([1, 2, 3]),
+             claim_actors=actors, genuine=genuine)
+    check_trial_index(path, probes, actors, genuine)          # same order: no error
+    np.savez(path, probe_recording_ids=np.array(["b", "a", "c"]), probe_actors=np.array([2, 1, 3]),
+             claim_actors=actors, genuine=genuine[[1, 0, 2]])
+    with pytest.raises(ValueError):
+        check_trial_index(path, probes, actors, genuine)

@@ -6,9 +6,10 @@
 - AU-only features with LDA reach 3.77% EER at k = 4. That is close to voice (3.34%) and far behind face appearance (0%).
 - Adding landmark and shape features gives 0.03% EER, but shape features are a form of face geometry, not behavior.
 - Fusing AU with voice cuts voice error by about 4x (3.34% to 0.85% at k = 4). Under 0 dB noise it cuts error from 13.86% to 2.07%, because the face video is unaffected by audio noise.
-- LDA learns from the same 24 actors, so part of its gain does not transfer. On 12 unseen actors, AU + LDA gives 17.5% EER and all-tracking + LDA gives 4.5%.
+- LDA learns from the same 24 actors (20 enrollment recordings each), while each template uses only k recordings. So the 3.77% answers a question about these 24 known actors. When LDA is fitted without 12 of the actors and tested on them, AU + LDA gives 17.5% EER and all-tracking + LDA gives 4.5%.
+- On movement alone: AU frame-to-frame change (velocity) gives 12.40%, all movement features 3.37%, and all shape features 0.43% (all with LDA). Shape works better on these recordings; we did not measure how much of the 0.03% combined result comes from shape.
 
-All numbers are test-split means over 10 enrollment seeds, HW3 EER, on the same trials as the main study. Full tables: `results/tracking/REPORT.md` (generated).
+Unless noted, numbers are test-split means over 10 enrollment seeds, HW3 EER, on the same trials as the main study (the controls in section 6 use a different setup, explained there). Full tables: `results/tracking/REPORT.md` (generated).
 
 ---
 
@@ -110,16 +111,18 @@ Fusion uses the team's fixed rule: the plain average of the systems' scores, wit
 
 ## 6. Controls
 
+The controls use the interpolated ROC EER (not the HW3 EER) and the first enrollment seed only. The excluded-actor control repeats over 20 random 12/12 actor splits and reports the mean.
+
 | Control | Result | Meaning |
 | --- | --- | --- |
-| Shuffled probe identities | 50.0% (AU), 51.3% (all tracking) | Chance level, so the pipeline leaks no identity |
-| LDA fitted on 12 actors, tested on the other 12 (20 splits, k = 4) | AU: 21.5% raw → 17.5% LDA. All tracking: 12.6% → 4.5% | Part of the LDA gain is learning these 24 actors. For new users, expect these numbers instead |
+| Shuffled probe identities | 50.0% (AU), 51.3% (all tracking) | Scores fell to chance after scrambling identities. This is a sanity check; it cannot rule out every kind of leakage |
+| Evaluation on actors excluded from LDA fitting: z-score and LDA fitted on 12 actors, tested on the other 12 (20 splits, k = 4) | AU: 21.5% raw → 17.5% LDA. All tracking: 12.6% → 4.5% | Part of the LDA gain comes from learning these 24 actors. Not fully actor-independent: the LDA settings and the best feature set were picked earlier on dev data from all 24 actors |
 | Test pairs with the same vs different sentence/emotion (AU + LDA) | 2.9% vs 10.4% | What is said still affects AU features even after LDA |
 
 ## 7. Limitations
 
 - **One session and 24 actors.** Shape features look excellent partly because each actor was filmed once, with the same camera and pose.
-- **LDA learns from the enrolled users.** SFace and ECAPA were trained on other people. The unseen-actor control quantifies this gap.
+- **LDA learns from the enrolled users.** SFace and ECAPA were trained on other people. The excluded-actor control shows the size of this gap, but its settings were chosen on all 24 actors, so it is not a fully independent new-user test.
 - **No blur or degradation test for tracking.** The tracking CSVs were computed from clean video. Testing blur would need OpenFace re-run on blurred video.
 - **Shape is not behavior.** Only the movement sets (AU motion, AU velocity, landmark motion) measure behavior; the strong results come from geometry.
 
