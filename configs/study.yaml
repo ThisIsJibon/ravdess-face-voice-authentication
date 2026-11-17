@@ -14,3 +14,25 @@ face_weight_candidates: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 device: auto
 torch_threads: 4
 bootstrap_replicates: 1000
+# Facial-tracking (action unit + landmark) study; see docs/TRACKING_STUDY.md
+tracking:
+  archive: FacialTracking_Actors_01-24
+  min_confidence: 0.8
+  min_frames: 10
+  output_dir: results/tracking
+  feature_sets:
+    au_level: [au_level]
+    au_motion: [au_motion]
+    au_velocity: [au_velocity]
+    au_level_motion: [au_level, au_motion]
+    au_all: [au_level, au_motion, au_velocity]
+    lmk_shape: [lmk_shape]
+    lmk_motion: [lmk_motion]
+    pdm_shape: [pdm_shape]
+    movement_all: [au_motion, au_velocity, lmk_motion]
+    shape_all: [lmk_shape, pdm_shape]
+    tracking_all: [au_level, au_motion, au_velocity, lmk_shape, lmk_motion, pdm_shape]
+  lda_dimensions: [8, 15, 23]
+  lda_shrinkage: [0.0, 0.1, 0.3, 0.6]
+  selection_enrollment_size: 4
+  unseen_actor_splits: 20

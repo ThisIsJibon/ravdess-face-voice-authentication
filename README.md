@@ -104,5 +104,9 @@ Primary implementation sources:
 
 The supplied instructor feedback approves RAVDESS. Use is educational and local; respect the dataset's CC BY-NC-SA 4.0 terms and model terms. The dataset describes acted speech under controlled conditions. Results do not establish mobile-device field performance, population fairness, liveness, cross-session security, or robustness to other attacks.
 
+## Facial-tracking study (action units and landmarks)
+
+An additional study tests the RAVDESS facial-tracking release (OpenFace action units and landmarks) for authentication, using the same splits, trials and metrics. After `all`, put `FacialTracking_Actors_01-24.zip` in `RAVDESS/` and run `python -m mbproject tracking`. Method and results: [docs/TRACKING_STUDY.md](docs/TRACKING_STUDY.md).
+
 For cloning, dataset placement, installation on another machine, and team branches, see [TEAM_SETUP.md](TEAM_SETUP.md).
 
