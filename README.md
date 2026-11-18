@@ -31,6 +31,23 @@ On another machine, install **Python 3.11**, copy the original `RAVDESS` speech 
 
 There are **61 conditions x 10 enrollment seeds x 4 systems = 2,440 evaluations**. Clean enrollment conditions serve both RQ1 and RQ2. The three questions progress from sample availability to fusion comparisons to robustness of the same systems. Each seed selects a preferred fusion using **development data only**; `fusion_selection.csv` records that selection. No improvement is assumed, and both fusion methods are retained even when a unimodal system performs better.
 
+### Extended RQ1 enrollment evaluation
+
+An additional 30-seed evaluation is configured in `configs/study_30_seeds.yaml`. It includes the original ten enrollment seeds and 20 additional unique seeds, using the same dataset partitions, models, enrollment sizes, conditions, and evaluation systems.
+
+The extended run contains **61 conditions x 30 enrollment seeds x 4 systems = 7,320 evaluations**.
+
+Run the extended evaluation and regenerate its figures with:
+
+```bash
+python -m mbproject --config configs/study_30_seeds.yaml evaluate
+python -m mbproject --config configs/study_30_seeds.yaml plots
+```
+
+Its outputs are stored separately under `results/30_seeds/`. The original `configs/study.yaml` and `results/full/` remain unchanged.
+
+The additional seeds examine variation in enrollment selection. They do not increase the number of independent test recordings: each condition still contains 480 genuine and 11,040 impostor comparisons. The original ten seeds are included in the 30-seed run, so comparisons between the two runs are overlapping rather than independent replications.
+
 ## Data and protocol
 
 - 24 actors, 60 speech recordings each: **1,440 naturally paired audio/video recordings**. Identity and every stimulus field must match across modalities. Song is excluded to keep all actors equally represented. Duplicate video-only encodings are excluded.
