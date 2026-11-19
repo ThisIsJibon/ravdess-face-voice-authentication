@@ -2,7 +2,7 @@
 
 **Question.** Can the facial *movement* and *geometry* measurements in the RAVDESS facial-tracking release (OpenFace action units and landmarks) authenticate a person, alone or fused with our face (SFace) and voice (ECAPA) systems? This follows Dr. Neal's suggestion to look at faces while people speak.
 
-**Short answer.** Yes, but mostly because of face *shape*, not movement:
+**Short answer.** Yes. Shape features performed better than movement features:
 - AU-only features with LDA reach 3.77% EER at k = 4. That is close to voice (3.34%) and far behind face appearance (0%).
 - Adding landmark and shape features gives 0.03% EER, but shape features are a form of face geometry, not behavior.
 - Fusing AU with voice cuts voice error by about 4x (3.34% to 0.85% at k = 4). Under 0 dB noise it cuts error from 13.86% to 2.07%, because the face video is unaffected by audio noise.
@@ -60,7 +60,9 @@ Nothing about the split or trials is recomputed independently. The code reads th
 
 ## 4. Learning step: z-score and LDA
 
-Raw features mix two things: who the person is, and what they are saying or feeling. Linear Discriminant Analysis (LDA) learns a projection that spreads different people apart and pulls each person's recordings together, down-weighting directions that mostly change with sentence or emotion.
+**Difference from SFace and ECAPA.** Those encoders are frozen and pretrained on other people. The AU representation instead learns its z-score and LDA from the enrollment clips of these 24 actors (20 per actor), while each template uses only k of them.
+
+Raw features mix two things: who the person is, and what they are saying or feeling. Linear Discriminant Analysis (LDA) uses the actor labels of the enrollment clips to find feature combinations that spread different people apart and pull each person's recordings together.
 
 1. **Z-score** each feature with the mean and standard deviation of the **enrollment** split.
 2. **LDA** is fitted on the **enrollment** split only (480 recordings, 24 actors).
@@ -87,7 +89,7 @@ Raw features mix two things: who the person is, and what they are saying or feel
 | All tracking (357) | 9.92% | **0.03%** |
 | *Reference: voice / face* | *3.34% / 0.00%* | |
 
-Shape features identify people far better than movement features. Without any learning, PDM shape alone (2.93%) already beats every movement set. So most of the identity in the tracking data is face geometry, which is a cruder version of what SFace already captures from appearance.
+Shape features identify people far better than movement features. Without any learning, PDM shape alone (2.93%) already beats every movement set. We did not measure how much of a person's identity comes from shape; we only compared how well each feature set performs. Shape features are face geometry, which overlaps with what SFace captures from appearance.
 
 **C: enrollment size** (test EER)
 
@@ -137,6 +139,7 @@ After the main pipeline (`python -m mbproject all`) has finished:
    - `summary.csv`, `metrics.csv` (Experiments A and C)
    - `fusion_summary.csv`, `fusion_metrics.csv` (Experiment B)
    - `controls.csv`, `dev_selection_grid.csv`, `dev_selected.csv`
-   - `figures/`
+   - `plot_scores.npz` (one seed, k = 16, clean: the scores used for the plots)
+   - `figures/`: feature sets, EER vs enrollment, noise fusion, `score_distributions.png`, `roc_det.png`, and `hw3_original/` (the HW3 script's own score distribution, DET and ROC plots for AU and AU + voice)
 
 Tests: `python -m pytest -q tests/test_tracking.py`.

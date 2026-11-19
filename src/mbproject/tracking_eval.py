@@ -250,6 +250,10 @@ def run_tracking(config):
                 scores[system] = score_matrix(E, row_of, test.recording_id, orders[seed], k)
             for combo in combos:
                 scores["+".join(combo)] = np.mean([scores[s] for s in combo], axis=0)
+            # Keep one example for the plots: first seed, k = 16, clean audio.
+            # This is the same seed and k the main study uses for its plots.
+            if seed == seeds[0] and k == reference_k and snr is None:
+                np.savez(out / "plot_scores.npz", genuine=genuine_test, **scores)
             for name, s in scores.items():
                 result = evaluate(s.ravel(), genuine_test.ravel(), thresholds[name], config["far_targets"])
                 fusion_rows.append({"systems": name, "audio_snr_db": "clean" if snr is None else str(snr),

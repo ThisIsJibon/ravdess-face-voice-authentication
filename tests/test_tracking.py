@@ -76,3 +76,17 @@ def test_misordered_trial_index_stops_the_run(tmp_path):
              claim_actors=actors, genuine=genuine[[1, 0, 2]])
     with pytest.raises(ValueError):
         check_trial_index(path, probes, actors, genuine)
+
+
+def test_plot_scores_are_saved_for_the_plots(tmp_path):
+    # run_tracking saves one example (first seed, k = 16, clean) for the report plots.
+    # The report reads it back: every system must be a (probes x claimed actors) matrix.
+    genuine = np.eye(24, dtype=bool).repeat(20, axis=0)          # 480 probes x 24 actors
+    scores = {name: np.random.default_rng(0).uniform(size=genuine.shape)
+              for name in ["face", "voice", "au", "au+voice", "tracking"]}
+    np.savez(tmp_path / "plot_scores.npz", genuine=genuine, **scores)
+    with np.load(tmp_path / "plot_scores.npz") as saved:
+        assert saved["genuine"].shape == (480, 24)
+        assert saved["genuine"].sum() == 480                      # one genuine claim per probe
+        for name in scores:
+            assert saved[name].shape == saved["genuine"].shape

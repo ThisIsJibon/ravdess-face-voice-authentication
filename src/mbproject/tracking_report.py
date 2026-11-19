@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 import json
+import os
 
 import matplotlib
 matplotlib.use("Agg")          # save figures to files, no window
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from scipy.stats import norm
+from sklearn.metrics import roc_curve
 
 from .tracking_eval import output_dir
+from .vendor.hw3_evaluator import Evaluator
 
 # Readable names for the feature sets (number = how many features).
 NAMES = {
@@ -93,6 +98,64 @@ def write_report(config):
     fig.savefig(figures / "noise_voice_fusion.png", dpi=200)
     plt.close(fig)
 
+    # ---- Figures 4 and 5: score distributions and ROC/DET (one seed, k = 16, clean) ----
+    # Same seed, k and style as the main study's rq2_score_distributions / rq2_roc_det plots.
+    with np.load(out / "plot_scores.npz") as saved:
+        plot_scores = {name: saved[name].ravel() for name in saved.files}
+    genuine = plot_scores.pop("genuine").astype(bool)
+    seed, reference_k = config["enrollment_seeds"][0], max(config["enrollment_sizes"])
+    plot_names = {"face": "Face (SFace)", "voice": "Voice (ECAPA)", "au": "AU + LDA",
+                  "au+voice": "AU + voice", "tracking": "All tracking + LDA"}
+    plot_colors = {"face": "#222222", "voice": "#c0392b", "au": "#2f6db5",
+                   "au+voice": "#8e44ad", "tracking": "#27ae60"}
+
+    # Figure 4: genuine vs impostor histograms. Less overlap = better system.
+    fig, axes = plt.subplots(2, 2, figsize=(10, 7), layout="constrained")
+    for ax, system in zip(axes.ravel(), ["voice", "au", "au+voice", "tracking"]):
+        for label, mask, color in [("Genuine", genuine, "#18856b"), ("Impostor", ~genuine, "#bf3b43")]:
+            ax.hist(plot_scores[system][mask], bins=np.linspace(0, 1, 51), density=True,
+                    histtype="step", linewidth=1.7, label=label, color=color)
+        ax.set(title=plot_names[system], xlabel="Scaled cosine similarity", ylabel="Density", xlim=(0, 1))
+        ax.legend(fontsize=8)
+    fig.suptitle(f"Genuine / impostor distributions: clean, seed {seed}, k = {reference_k}")
+    fig.savefig(figures / "score_distributions.png", dpi=200)
+    plt.close(fig)
+
+    # Figure 5: ROC (top-left is better) and DET (bottom-left is better).
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), layout="constrained")
+    for system in ["face", "voice", "au", "au+voice"]:
+        fpr, tpr, _ = roc_curve(genuine, plot_scores[system], drop_intermediate=False)
+        axes[0].plot(fpr, tpr, label=plot_names[system], color=plot_colors[system])
+        # DET uses normal-deviate axes so small error rates are easier to see.
+        axes[1].plot(norm.ppf(np.clip(fpr, 1e-5, 1 - 1e-5)), norm.ppf(np.clip(1 - tpr, 1e-5, 1 - 1e-5)),
+                     label=plot_names[system], color=plot_colors[system])
+    axes[0].set(xlabel="False acceptance rate", ylabel="Genuine acceptance rate", title="ROC: clean probes")
+    ticks = np.array([.0001, .001, .01, .1, .5, .9])
+    axes[1].set_xticks(norm.ppf(ticks), ["0.01", "0.1", "1", "10", "50", "90"])
+    axes[1].set_yticks(norm.ppf(ticks), ["0.01", "0.1", "1", "10", "50", "90"])
+    axes[1].set(xlabel="False acceptance rate (%)", ylabel="False rejection rate (%)", title="DET")
+    axes[0].legend(fontsize=8)
+    fig.suptitle(f"Seed {seed}; {reference_k} enrollment recordings per actor")
+    fig.savefig(figures / "roc_det.png", dpi=200)
+    plt.close(fig)
+
+    # HW3 script's own plots (score distribution, DET, ROC) for AU and AU + voice,
+    # called exactly like the main study does for face and voice.
+    hw3_folder = figures / "hw3_original"
+    hw3_folder.mkdir(exist_ok=True)
+    previous = os.getcwd()
+    try:
+        os.chdir(hw3_folder)                     # the HW3 script saves into the current folder
+        for system in ["au", "au+voice"]:
+            evaluator = Evaluator(500, plot_scores[system][genuine], plot_scores[system][~genuine], system)
+            fpr, fnr, tpr = evaluator.compute_rates()
+            evaluator.plot_score_distribution()
+            evaluator.plot_det_curve(fpr, fnr)
+            evaluator.plot_roc_curve(fpr, tpr)
+            plt.close("all")
+    finally:
+        os.chdir(previous)
+
     # ---- REPORT.md ----
     lines_md = [
         "# Facial-tracking study results",
@@ -125,7 +188,12 @@ def write_report(config):
                  "| --- | " + " | ".join("---" for _ in sizes) + " |"]
     for systems, label, *_ in lines:
         lines_md.append(f"| {label} | " + " | ".join(percent(system_eer(systems, s)) for s in sizes) + " |")
-    lines_md += ["", "![enrollment](figures/eer_vs_enrollment.png)", "", "## Controls", "",
+    lines_md += ["", "![enrollment](figures/eer_vs_enrollment.png)", "",
+                 f"## D. Score distributions and ROC/DET (seed {seed}, k = {reference_k}, clean)", "",
+                 "Same seed and k as the main study's plots. The HW3 script's own score distribution, "
+                 "DET and ROC plots for AU and AU + voice are in `figures/hw3_original/`.", "",
+                 "![score distributions](figures/score_distributions.png)", "",
+                 "![ROC and DET](figures/roc_det.png)", "", "## Controls", "",
                  "| Control | System | EER | std over splits |", "| --- | --- | --- | --- |"]
     for row in controls.groupby(["control", "system"]).eer.agg(["mean", "std"]).reset_index().itertuples():
         spread = "" if pd.isna(row.std) else percent(row.std)
@@ -137,4 +205,4 @@ def write_report(config):
                  "(20 random splits). LDA settings were chosen earlier on dev data from all 24 actors.",
                  "- same/different_content_pairs: pairs of test recordings with the same or a different sentence + emotion."]
     (out / "REPORT.md").write_text("\n".join(lines_md) + "\n", encoding="utf-8")
-    print(f"Wrote {out / 'REPORT.md'} and 3 figures", flush=True)
+    print(f"Wrote {out / 'REPORT.md'} and 5 figures (+ HW3 plots)", flush=True)
