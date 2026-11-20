@@ -93,6 +93,8 @@ Shape features identify people far better than movement features. Without any le
 
 **C: enrollment size** (test EER)
 
+For AU and tracking, k changes only the template size. The z-score and LDA are always learned from all 20 enrollment clips per actor, so these rows show a fixed learned representation with a growing template. They do not show AU working with only 1 or 4 enrollment clips in total.
+
 | System | k=1 | k=4 | k=16 |
 | --- | --- | --- | --- |
 | Voice | 7.69% | 3.34% | 2.22% |

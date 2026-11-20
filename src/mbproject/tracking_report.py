@@ -28,84 +28,18 @@ def percent(value):
     return f"{100 * value:.2f}%"
 
 
-def write_report(config):
-    out = output_dir(config)
-    figures = out / "figures"
-    figures.mkdir(exist_ok=True)
-    k = config["tracking"]["selection_enrollment_size"]
-    info = json.loads((out / "run_complete.json").read_text())
-    summary = pd.read_csv(out / "summary.csv")
-    fusion = pd.read_csv(out / "fusion_summary.csv")
-    controls = pd.read_csv(out / "controls.csv")
-    chosen = pd.read_csv(out / "dev_selected.csv").set_index("feature_set")
+def plot_example_scores(scores_path, figures, seed, reference_k, best_label):
+    """Figures 4 and 5 plus the HW3 plots, drawn from the saved example scores.
 
-    def feature_eer(name, rep, size, column="hw3_eer_mean"):
-        row = summary[(summary.feature_set == name) & (summary.representation == rep) & (summary.k == size)]
-        return float(row[column].iloc[0])
-
-    def system_eer(systems, size, noise="clean", column="hw3_eer_mean"):
-        row = fusion[(fusion.systems == systems) & (fusion.k == size) & (fusion.audio_snr_db.astype(str) == noise)]
-        return float(row[column].iloc[0])
-
-    # ---- Figure 1: error of every feature set, raw vs LDA ----
-    names = [n for n in NAMES if n in chosen.index]
-    fig, ax = plt.subplots(figsize=(8, 5))
-    positions = range(len(names))
-    ax.barh([p + 0.2 for p in positions], [100 * feature_eer(n, "raw", k) for n in names],
-            height=0.4, color="#b0b7c3", label="raw (z-score only)")
-    ax.barh([p - 0.2 for p in positions], [100 * feature_eer(n, "lda", k) for n in names],
-            height=0.4, color="#2f6db5", label="with LDA")
-    ax.axvline(100 * system_eer("voice", k), color="#c0392b", ls="--", label="voice")
-    ax.set_yticks(list(positions), [NAMES[n] for n in names])
-    ax.invert_yaxis()
-    ax.set_xlabel(f"Test EER (%), k = {k}")
-    ax.set_title("Which facial-tracking features identify a person?")
-    ax.legend(loc="lower right")
-    fig.tight_layout()
-    fig.savefig(figures / "feature_sets_eer.png", dpi=200)
-    plt.close(fig)
-
-    # ---- Figure 2: error vs number of enrollment recordings ----
-    sizes = sorted(summary.k.unique())
-    lines = [("face", "Face (SFace)", "#222222", "-"), ("voice", "Voice (ECAPA)", "#c0392b", "-"),
-             ("au", "AU + LDA", "#2f6db5", "-"), ("au+voice", "AU + voice", "#2f6db5", "--"),
-             ("tracking", "All tracking + LDA", "#27ae60", "-"), ("tracking+voice", "All tracking + voice", "#27ae60", "--")]
-    fig, ax = plt.subplots(figsize=(8, 5))
-    for systems, label, color, style in lines:
-        ax.plot(sizes, [100 * system_eer(systems, s) for s in sizes], style, marker="o", color=color, label=label)
-    ax.set_xscale("log", base=2)
-    ax.set_xticks(sizes, [str(s) for s in sizes])
-    ax.set_xlabel("Enrollment recordings per person (k)")
-    ax.set_ylabel("Test EER (%)")
-    ax.set_title("Error vs enrollment size")
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    fig.savefig(figures / "eer_vs_enrollment.png", dpi=200)
-    plt.close(fig)
-
-    # ---- Figure 3: noisy voice with and without tracking ----
-    noise = ["clean", "20", "10", "0"]
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    for systems, label, color in [("voice", "Voice", "#c0392b"), ("au+voice", "AU + voice", "#2f6db5"),
-                                  ("tracking+voice", "All tracking + voice", "#27ae60")]:
-        ax.plot(range(4), [100 * system_eer(systems, k, n) for n in noise], marker="o", color=color, label=label)
-    ax.set_xticks(range(4), ["clean", "20 dB", "10 dB", "0 dB"])
-    ax.set_xlabel("Noise added to the probe audio")
-    ax.set_ylabel(f"Test EER (%), k = {k}")
-    ax.set_title("Does facial tracking help voice under noise?")
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(figures / "noise_voice_fusion.png", dpi=200)
-    plt.close(fig)
-
-    # ---- Figures 4 and 5: score distributions and ROC/DET (one seed, k = 16, clean) ----
-    # Same seed, k and style as the main study's rq2_score_distributions / rq2_roc_det plots.
-    with np.load(out / "plot_scores.npz") as saved:
+    The example is one seed, k = 16, clean audio: the same seed, k and style as the
+    main study's rq2_score_distributions / rq2_roc_det plots. best_label names the
+    feature set picked on dev data for the "tracking" system (e.g. "All tracking").
+    """
+    with np.load(scores_path) as saved:
         plot_scores = {name: saved[name].ravel() for name in saved.files}
     genuine = plot_scores.pop("genuine").astype(bool)
-    seed, reference_k = config["enrollment_seeds"][0], max(config["enrollment_sizes"])
     plot_names = {"face": "Face (SFace)", "voice": "Voice (ECAPA)", "au": "AU + LDA",
-                  "au+voice": "AU + voice", "tracking": "All tracking + LDA"}
+                  "au+voice": "AU + voice", "tracking": f"{best_label} + LDA"}
     plot_colors = {"face": "#222222", "voice": "#c0392b", "au": "#2f6db5",
                    "au+voice": "#8e44ad", "tracking": "#27ae60"}
 
@@ -155,6 +89,84 @@ def write_report(config):
             plt.close("all")
     finally:
         os.chdir(previous)
+
+
+def write_report(config):
+    out = output_dir(config)
+    figures = out / "figures"
+    figures.mkdir(exist_ok=True)
+    k = config["tracking"]["selection_enrollment_size"]
+    info = json.loads((out / "run_complete.json").read_text())
+    summary = pd.read_csv(out / "summary.csv")
+    fusion = pd.read_csv(out / "fusion_summary.csv")
+    controls = pd.read_csv(out / "controls.csv")
+    chosen = pd.read_csv(out / "dev_selected.csv").set_index("feature_set")
+    # The "tracking" system is whichever feature set won on dev data, so name it from the run.
+    best_label = NAMES[info["best_feature_set"]].split(" (")[0]          # e.g. "All tracking"
+
+    def feature_eer(name, rep, size, column="hw3_eer_mean"):
+        row = summary[(summary.feature_set == name) & (summary.representation == rep) & (summary.k == size)]
+        return float(row[column].iloc[0])
+
+    def system_eer(systems, size, noise="clean", column="hw3_eer_mean"):
+        row = fusion[(fusion.systems == systems) & (fusion.k == size) & (fusion.audio_snr_db.astype(str) == noise)]
+        return float(row[column].iloc[0])
+
+    # ---- Figure 1: error of every feature set, raw vs LDA ----
+    names = [n for n in NAMES if n in chosen.index]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    positions = range(len(names))
+    ax.barh([p + 0.2 for p in positions], [100 * feature_eer(n, "raw", k) for n in names],
+            height=0.4, color="#b0b7c3", label="raw (z-score only)")
+    ax.barh([p - 0.2 for p in positions], [100 * feature_eer(n, "lda", k) for n in names],
+            height=0.4, color="#2f6db5", label="with LDA")
+    ax.axvline(100 * system_eer("voice", k), color="#c0392b", ls="--", label="voice")
+    ax.set_yticks(list(positions), [NAMES[n] for n in names])
+    ax.invert_yaxis()
+    ax.set_xlabel(f"Test EER (%), k = {k}")
+    ax.set_title("Which facial-tracking features identify a person?")
+    ax.legend(loc="lower right")
+    fig.tight_layout()
+    fig.savefig(figures / "feature_sets_eer.png", dpi=200)
+    plt.close(fig)
+
+    # ---- Figure 2: error vs number of enrollment recordings ----
+    sizes = sorted(summary.k.unique())
+    lines = [("face", "Face (SFace)", "#222222", "-"), ("voice", "Voice (ECAPA)", "#c0392b", "-"),
+             ("au", "AU + LDA", "#2f6db5", "-"), ("au+voice", "AU + voice", "#2f6db5", "--"),
+             ("tracking", f"{best_label} + LDA", "#27ae60", "-"), ("tracking+voice", f"{best_label} + voice", "#27ae60", "--")]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for systems, label, color, style in lines:
+        ax.plot(sizes, [100 * system_eer(systems, s) for s in sizes], style, marker="o", color=color, label=label)
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(sizes, [str(s) for s in sizes])
+    ax.set_xlabel("Enrollment recordings per person (k)")
+    ax.set_ylabel("Test EER (%)")
+    ax.set_title("Error vs enrollment size")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(figures / "eer_vs_enrollment.png", dpi=200)
+    plt.close(fig)
+
+    # ---- Figure 3: noisy voice with and without tracking ----
+    noise = ["clean", "20", "10", "0"]
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for systems, label, color in [("voice", "Voice", "#c0392b"), ("au+voice", "AU + voice", "#2f6db5"),
+                                  ("tracking+voice", f"{best_label} + voice", "#27ae60")]:
+        ax.plot(range(4), [100 * system_eer(systems, k, n) for n in noise], marker="o", color=color, label=label)
+    ax.set_xticks(range(4), ["clean", "20 dB", "10 dB", "0 dB"])
+    ax.set_xlabel("Noise added to the probe audio")
+    ax.set_ylabel(f"Test EER (%), k = {k}")
+    ax.set_title("Does facial tracking help voice under noise?")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(figures / "noise_voice_fusion.png", dpi=200)
+    plt.close(fig)
+
+    # ---- Figures 4 and 5 + HW3 plots, from the example scores saved by run_tracking ----
+    plot_example_scores(out / "plot_scores.npz", figures, config["enrollment_seeds"][0],
+                        max(config["enrollment_sizes"]), best_label)
+    seed, reference_k = config["enrollment_seeds"][0], max(config["enrollment_sizes"])
 
     # ---- REPORT.md ----
     lines_md = [

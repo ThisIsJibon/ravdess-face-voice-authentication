@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 
 from mbproject.tracking import AU_COLUMNS, SHAPE_COLUMNS, X_COLUMNS, Y_COLUMNS, normalize_landmarks, summarize_recording
-from mbproject.tracking_eval import Embedding, check_trial_index
+from mbproject.tracking_eval import Embedding, check_trial_index, save_plot_scores
+from mbproject.tracking_report import plot_example_scores
 
 
 def fake_tracking_csv(frames=40, confidence=0.95, seed=0):
@@ -78,15 +79,27 @@ def test_misordered_trial_index_stops_the_run(tmp_path):
         check_trial_index(path, probes, actors, genuine)
 
 
-def test_plot_scores_are_saved_for_the_plots(tmp_path):
-    # run_tracking saves one example (first seed, k = 16, clean) for the report plots.
-    # The report reads it back: every system must be a (probes x claimed actors) matrix.
-    genuine = np.eye(24, dtype=bool).repeat(20, axis=0)          # 480 probes x 24 actors
-    scores = {name: np.random.default_rng(0).uniform(size=genuine.shape)
+
+def test_saved_example_scores_produce_all_plots(tmp_path):
+    # Save example scores the way run_tracking does, then draw the report plots from them.
+    genuine = np.eye(24, dtype=bool).repeat(20, axis=0)          # 480 probes x 24 claimed actors
+    rng = np.random.default_rng(0)
+    # Genuine scores a bit higher than impostor scores, like a working system.
+    scores = {name: np.clip(rng.normal(0.5, 0.1, genuine.shape) + 0.3 * genuine, 0, 1)
               for name in ["face", "voice", "au", "au+voice", "tracking"]}
-    np.savez(tmp_path / "plot_scores.npz", genuine=genuine, **scores)
-    with np.load(tmp_path / "plot_scores.npz") as saved:
-        assert saved["genuine"].shape == (480, 24)
-        assert saved["genuine"].sum() == 480                      # one genuine claim per probe
-        for name in scores:
-            assert saved[name].shape == saved["genuine"].shape
+    save_plot_scores(tmp_path / "plot_scores.npz", genuine, scores)
+    figures = tmp_path / "figures"
+    figures.mkdir()
+    plot_example_scores(tmp_path / "plot_scores.npz", figures, seed=73, reference_k=16, best_label="PDM shape")
+    expected = ["score_distributions.png", "roc_det.png"] + [
+        f"hw3_original/{kind}_({system}).png" for system in ["au", "au+voice"]
+        for kind in ["score_distribution_plot", "det_curve", "roc_curve"]]
+    for name in expected:
+        assert (figures / name).is_file(), f"missing {name}"
+
+
+def test_plot_scores_with_the_wrong_shape_are_rejected(tmp_path):
+    # A score matrix that does not line up with the labels must stop the run.
+    genuine = np.eye(3, dtype=bool)
+    with pytest.raises(ValueError):
+        save_plot_scores(tmp_path / "plot_scores.npz", genuine, {"au": np.zeros((2, 3))})

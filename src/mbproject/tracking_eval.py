@@ -116,6 +116,18 @@ def check_trial_index(path, probes, actors, genuine):
             raise ValueError(f"{path.name}: genuine/impostor labels differ from the main study")
 
 
+def save_plot_scores(path, genuine, scores):
+    """Save one example of test scores (with genuine/impostor labels) for the report plots.
+
+    Every system must be a (probes x claimed actors) matrix, the same layout as the labels,
+    otherwise the plots would mix up genuine and impostor scores.
+    """
+    for name, matrix in scores.items():
+        if matrix.shape != genuine.shape:
+            raise ValueError(f"plot scores for {name} have shape {matrix.shape}, expected {genuine.shape}")
+    np.savez(path, genuine=genuine, **scores)
+
+
 def average_over_seeds(rows, group_by):
     """Mean / std / min / max of each metric over the 10 seeds."""
     table = pd.DataFrame(rows).groupby(group_by)[METRICS].agg(["mean", "std", "min", "max"]).reset_index()
@@ -253,7 +265,7 @@ def run_tracking(config):
             # Keep one example for the plots: first seed, k = 16, clean audio.
             # This is the same seed and k the main study uses for its plots.
             if seed == seeds[0] and k == reference_k and snr is None:
-                np.savez(out / "plot_scores.npz", genuine=genuine_test, **scores)
+                save_plot_scores(out / "plot_scores.npz", genuine_test, scores)
             for name, s in scores.items():
                 result = evaluate(s.ravel(), genuine_test.ravel(), thresholds[name], config["far_targets"])
                 fusion_rows.append({"systems": name, "audio_snr_db": "clean" if snr is None else str(snr),
