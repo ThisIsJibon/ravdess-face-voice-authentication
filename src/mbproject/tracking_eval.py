@@ -161,6 +161,9 @@ def run_tracking(config):
     data_dir, main_results = Path(config["data_dir"]), Path(config["results_dir"])
     out = output_dir(config)
     out.mkdir(parents=True, exist_ok=True)
+    # Remove the old "finished" marker first, so a run that fails halfway never
+    # looks complete next to half-overwritten tables.
+    (out / "run_complete.json").unlink(missing_ok=True)
 
     # --- Load the split and the tracking features -------------------------------
     manifest = pd.read_csv(data_dir / "manifest.csv", dtype={"recording_id": str})
@@ -339,13 +342,17 @@ def run_tracking(config):
             controls.append({"control": label, "system": system, "eer": eer(similarity[pairs], same_actor[pairs])})
     pd.DataFrame(controls).to_csv(out / "controls.csv", index=False)
 
-    write_json(out / "run_complete.json", {
-        "status": "complete", "seconds": round(time.time() - start, 1),
-        "best_feature_set": best_set, "best_lda": chosen[best_set]["lda"],
-        "chosen_on": f"development EER at k = {pick_k}",
-        "genuine_trials": int(genuine_test.sum()), "impostor_trials": int((~genuine_test).sum())})
+    info = {"status": "complete", "seconds": round(time.time() - start, 1),
+            "best_feature_set": best_set, "best_lda": chosen[best_set]["lda"],
+            "chosen_on": f"development EER at k = {pick_k}",
+            "genuine_trials": int(genuine_test.sum()), "impostor_trials": int((~genuine_test).sum())}
     print(f"Best feature set on dev data: {best_set} ({chosen[best_set]['lda']})", flush=True)
-
-    from .tracking_report import write_report
-    write_report(config)
+    finish_run(config, out, info)
     print(f"Done. Results are in {out}", flush=True)
+
+
+def finish_run(config, out, info):
+    """Write REPORT.md and the figures, and only then mark the run as complete."""
+    from . import tracking_report
+    tracking_report.write_report(config, info)
+    write_json(out / "run_complete.json", info)

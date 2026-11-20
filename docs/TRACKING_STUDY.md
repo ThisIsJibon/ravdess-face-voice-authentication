@@ -94,7 +94,7 @@ Raw features mix two things: who the person is, and what they are saying or feel
 
 The HW3 EER checks 500 fixed thresholds. The exact EER (interpolated ROC) differs from it by at most 0.04 percentage points in this table. That only matters for the smallest value: All tracking is 0.03% with HW3 and 0.05% exact. `REPORT.md` shows both.
 
-Shape feature sets achieved lower EER than movement feature sets in this experiment. Without any learning, PDM shape alone (2.93%) already beats every movement set. We did not measure how much of a person's identity comes from shape; we only compared how well each feature set performs. Shape features are face geometry, which overlaps with what SFace captures from appearance.
+Shape feature sets achieved lower EER than movement feature sets in this experiment. Without LDA (z-score only), PDM shape alone (2.93%) already beats every movement set. We did not measure how much of a person's identity comes from shape; we only compared how well each feature set performs. Shape features are face geometry, which overlaps with what SFace captures from appearance.
 
 **C: enrollment size** (test EER)
 
@@ -130,7 +130,7 @@ The controls use the interpolated ROC EER (not the HW3 EER) and the first enroll
 
 ## 7. Limitations
 
-- **One session and 24 actors.** Shape features look excellent partly because each actor was filmed once, with the same camera and pose.
+- **One session and 24 actors.** Each actor was filmed once, with the same camera and pose. These controlled conditions may contribute to the strong shape results; cross-session generalization was not evaluated.
 - **LDA learns from the enrolled users.** SFace and ECAPA were trained on other people. The excluded-actor control shows the size of this gap, but its settings were chosen on all 24 actors, so it is not a fully independent new-user test.
 - **No blur or degradation test for tracking.** The tracking CSVs were computed from clean video. Testing blur would need OpenFace re-run on blurred video.
 - **Shape is not behavior.** Only the movement sets (AU motion, AU velocity, landmark motion) measure behavior. Geometry feature sets achieved lower EER in this experiment; we did not measure which features cause the combined result.

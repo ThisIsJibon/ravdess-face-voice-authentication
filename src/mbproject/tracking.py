@@ -70,6 +70,10 @@ def list_csv_files(source):
         base = Path(name).name
         # Skip folders and hidden macOS files like "__MACOSX/._name.csv".
         if base.endswith(".csv") and "__MACOSX" not in name and not base.startswith("._"):
+            # Two copies of the same file (e.g. an extra unzipped folder) would make the
+            # choice depend on listing order, so stop instead of picking one silently.
+            if base in files:
+                raise ValueError(f"Tracking file {base} appears twice: {files[base]} and {name}")
             files[base] = name
     return files
 

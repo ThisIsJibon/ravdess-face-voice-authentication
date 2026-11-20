@@ -1,7 +1,6 @@
 """Step 3 of the tracking study: make the tables (REPORT.md) and figures."""
 from __future__ import annotations
 
-import json
 import os
 
 import matplotlib
@@ -100,12 +99,12 @@ def plot_example_scores(scores_path, figures, seed, reference_k, best_label):
         os.chdir(previous)
 
 
-def write_report(config):
+def write_report(config, info):
+    """REPORT.md and figures 1-5. info = run details from run_tracking (best feature set etc.)."""
     out = output_dir(config)
     figures = out / "figures"
     figures.mkdir(exist_ok=True)
     k = config["tracking"]["selection_enrollment_size"]
-    info = json.loads((out / "run_complete.json").read_text())
     summary = pd.read_csv(out / "summary.csv")
     fusion = pd.read_csv(out / "fusion_summary.csv")
     controls = pd.read_csv(out / "controls.csv")

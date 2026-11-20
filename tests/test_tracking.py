@@ -9,8 +9,9 @@ import pytest
 from mbproject.tracking import (AU_COLUMNS, SHAPE_COLUMNS, X_COLUMNS, Y_COLUMNS, extraction_settings,
                                 features_are_current, list_csv_files, normalize_landmarks, read_csv,
                                 summarize_recording)
-from mbproject.tracking_eval import (Embedding, check_main_run, check_trial_index, save_plot_scores,
-                                     score_matrix)
+from mbproject import tracking_report
+from mbproject.tracking_eval import (Embedding, check_main_run, check_trial_index, finish_run, run_tracking,
+                                     save_plot_scores, score_matrix)
 from mbproject.tracking_report import eer_method_note, plot_example_scores
 
 
@@ -210,3 +211,35 @@ def test_template_uses_the_first_k_enrollment_recordings():
     assert np.isclose(k1[0, 0], (np.cos(np.pi / 4) + 1) / 2)
     assert np.isclose(k2[0, 0], 1.0)
     assert np.isclose(score_matrix(embeddings, row_of, ["far"], orders, k=1)[0, 0], 0.0)
+
+
+def test_failed_rerun_removes_the_old_complete_marker(tmp_path):
+    # A finished run left run_complete.json behind. A new run that fails early
+    # (here: no manifest) must not leave that old marker next to its outputs.
+    out = tmp_path / "results"
+    out.mkdir()
+    (out / "run_complete.json").write_text('{"status": "complete"}')
+    config = {"data_dir": str(tmp_path / "data"), "results_dir": str(tmp_path / "full"),
+              "tracking": {"output_dir": str(out)}}
+    with pytest.raises(FileNotFoundError):
+        run_tracking(config)
+    assert not (out / "run_complete.json").exists()
+
+
+def test_run_is_not_marked_complete_if_the_report_fails(tmp_path, monkeypatch):
+    def broken_report(config, info):
+        raise RuntimeError("figure could not be drawn")
+    monkeypatch.setattr(tracking_report, "write_report", broken_report)
+    with pytest.raises(RuntimeError):
+        finish_run({}, tmp_path, {"status": "complete"})
+    assert not (tmp_path / "run_complete.json").exists()
+
+
+def test_duplicate_tracking_files_stop_the_run(tmp_path):
+    # The same recording in two folders: which one is used must not depend on listing order.
+    archive = tmp_path / "Tracking.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("Actor_12/01-01-03-02-01-01-12.csv", "frame\n1\n")
+        z.writestr("copy/Actor_12/01-01-03-02-01-01-12.csv", "frame\n2\n")
+    with pytest.raises(ValueError, match="appears twice"):
+        list_csv_files(archive)
