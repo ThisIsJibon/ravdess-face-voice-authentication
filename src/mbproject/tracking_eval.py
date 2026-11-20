@@ -26,7 +26,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from .common import ROOT, audio_key, unit, write_json
 from .dataset import enrollment_order
 from .metrics import eer, evaluate, fit_policies
-from .tracking import extract_tracking, load_tracking
+from .tracking import extract_tracking, features_are_current, load_tracking
 
 # Columns we average over the 10 seeds in the summary tables.
 METRICS = ["eer", "hw3_eer", "dprime", "auc", "far_at_dev_far_0.01", "frr_at_dev_far_0.01",
@@ -116,6 +116,23 @@ def check_trial_index(path, probes, actors, genuine):
             raise ValueError(f"{path.name}: genuine/impostor labels differ from the main study")
 
 
+# Settings that must be the same in the main face/voice run and in this study,
+# because we reuse its saved scores (e.g. its dev scores are made at k = max size).
+SHARED_SETTINGS = ["enrollment_seeds", "enrollment_sizes", "degradation_enrollment_sizes", "audio_snr_db", "split_seed"]
+
+
+def check_main_run(main_results, config):
+    """Stop if the main face/voice run is unfinished or used different settings."""
+    done, used = main_results / "run_complete.json", main_results / "config_resolved.json"
+    if not done.exists() or json.loads(done.read_text()).get("status") != "complete":
+        raise FileNotFoundError(f"{done} is missing or not complete: run 'python -m mbproject all' first")
+    main_config = json.loads(used.read_text())
+    for key in SHARED_SETTINGS:
+        if main_config.get(key) != config.get(key):
+            raise ValueError(f"'{key}' differs from the main run ({main_config.get(key)} vs {config.get(key)}); "
+                             "rerun 'python -m mbproject all' with the same config")
+
+
 def save_plot_scores(path, genuine, scores):
     """Save one example of test scores (with genuine/impostor labels) for the report plots.
 
@@ -147,7 +164,9 @@ def run_tracking(config):
 
     # --- Load the split and the tracking features -------------------------------
     manifest = pd.read_csv(data_dir / "manifest.csv", dtype={"recording_id": str})
-    if not (data_dir / "tracking" / "features.npz").exists():
+    if not features_are_current(config):
+        # Missing features, or they were made with different settings or code.
+        print("Tracking features are missing or out of date: extracting them again", flush=True)
         extract_tracking(config)
     blocks = load_tracking(config)
     assert list(blocks["recording_ids"]) == list(manifest.recording_id), "features not in manifest order"
@@ -162,15 +181,18 @@ def run_tracking(config):
     genuine_test = test.actor.to_numpy()[:, None] == actors[None, :]
 
     # --- Check we use exactly the same trials and enrollments as face/voice --------
+    check_main_run(main_results, config)
     check_trial_index(main_results / "trial_index.npz", test, actors, genuine_test)
     check_trial_index(main_results / "development_trial_index.npz", dev, actors, genuine_dev)
     seeds, sizes = config["enrollment_seeds"], config["enrollment_sizes"]
     orders = {seed: enrollment_order(manifest, seed) for seed in seeds}
     for seed in seeds:
         saved = main_results / "enrollment" / f"seed_{seed}.json"
-        if saved.exists():
-            saved_order = {int(a): ids for a, ids in json.loads(saved.read_text()).items()}
-            assert saved_order == orders[seed], f"enrollment order for seed {seed} differs"
+        if not saved.exists():
+            raise FileNotFoundError(f"{saved} is missing: run 'python -m mbproject all' first")
+        saved_order = {int(a): ids for a, ids in json.loads(saved.read_text()).items()}
+        if saved_order != orders[seed]:
+            raise ValueError(f"enrollment order for seed {seed} differs from the main study")
     reference_k = max(sizes)                        # thresholds are fixed at k = 16, like the main study
     pick_k = settings["selection_enrollment_size"]  # LDA settings are picked on dev at k = 4
 
@@ -303,14 +325,16 @@ def run_tracking(config):
                 controls.append({"control": f"unseen_actors_{rep}", "system": system, "split": split,
                                  "eer": eer(s, genuine)})
 
-    # 3) Same sentence+emotion vs different: compare pairs of test recordings.
+    # 3) Same stimulus vs different stimulus: compare pairs of test recordings.
+    #    A stimulus = statement + emotion + intensity together, so this does not
+    #    separate the effect of the sentence from the effect of the emotion.
     same_actor = test.actor.to_numpy()[:, None] == test.actor.to_numpy()[None, :]
-    same_content = test.stimulus_group.to_numpy()[:, None] == test.stimulus_group.to_numpy()[None, :]
+    same_stimulus = test.stimulus_group.to_numpy()[:, None] == test.stimulus_group.to_numpy()[None, :]
     each_pair_once = np.triu(np.ones_like(same_actor), k=1).astype(bool)
     for system, E in tracking_systems.items():
         T = E[[row_of[r] for r in test.recording_id]]
         similarity = cosine_scores(T, T)
-        for label, mask in [("same_content_pairs", same_content), ("different_content_pairs", ~same_content)]:
+        for label, mask in [("same_stimulus_pairs", same_stimulus), ("different_stimulus_pairs", ~same_stimulus)]:
             pairs = each_pair_once & mask
             controls.append({"control": label, "system": system, "eer": eer(similarity[pairs], same_actor[pairs])})
     pd.DataFrame(controls).to_csv(out / "controls.csv", index=False)

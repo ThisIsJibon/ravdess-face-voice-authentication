@@ -1,10 +1,13 @@
 """Tests for the facial-tracking study (no real data needed)."""
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from mbproject.tracking import AU_COLUMNS, SHAPE_COLUMNS, X_COLUMNS, Y_COLUMNS, normalize_landmarks, summarize_recording
-from mbproject.tracking_eval import Embedding, check_trial_index, save_plot_scores
+from mbproject.tracking import (AU_COLUMNS, SHAPE_COLUMNS, X_COLUMNS, Y_COLUMNS, extraction_settings,
+                                features_are_current, normalize_landmarks, summarize_recording)
+from mbproject.tracking_eval import Embedding, check_main_run, check_trial_index, save_plot_scores
 from mbproject.tracking_report import plot_example_scores
 
 
@@ -48,6 +51,15 @@ def test_summary_has_expected_sizes_and_drops_low_confidence_frames():
 def test_too_few_good_frames_raises_an_error():
     with pytest.raises(ValueError):
         summarize_recording(fake_tracking_csv(confidence=0.5), min_confidence=0.8, min_frames=10)
+
+
+def test_no_consecutive_good_frames_raises_a_clear_error():
+    # Every other frame is low confidence: enough good frames, but none are neighbours,
+    # so AU velocity would be the mean of nothing (NaN).
+    table = fake_tracking_csv()
+    table.loc[1::2, "confidence"] = 0.1
+    with pytest.raises(ValueError, match="next to each other"):
+        summarize_recording(table, min_confidence=0.8, min_frames=10)
 
 
 def test_embedding_only_learns_from_training_data():
@@ -103,3 +115,39 @@ def test_plot_scores_with_the_wrong_shape_are_rejected(tmp_path):
     genuine = np.eye(3, dtype=bool)
     with pytest.raises(ValueError):
         save_plot_scores(tmp_path / "plot_scores.npz", genuine, {"au": np.zeros((2, 3))})
+
+
+def fake_tracking_config(tmp_path):
+    """A config with a fake tracking archive and manifest, enough to describe an extraction."""
+    (tmp_path / "RAVDESS").mkdir()
+    (tmp_path / "RAVDESS" / "Tracking.zip").write_bytes(b"fake archive")
+    (tmp_path / "data" / "tracking").mkdir(parents=True)
+    (tmp_path / "data" / "manifest.csv").write_text("recording_id\n01\n")
+    (tmp_path / "data" / "tracking" / "features.npz").write_bytes(b"")
+    return {"dataset_dir": str(tmp_path / "RAVDESS"), "data_dir": str(tmp_path / "data"),
+            "tracking": {"archive": "Tracking", "min_confidence": 0.8, "min_frames": 10}}
+
+
+def test_saved_features_are_out_of_date_when_settings_change(tmp_path):
+    config = fake_tracking_config(tmp_path)
+    saved = tmp_path / "data" / "tracking" / "extraction.json"
+    saved.write_text(json.dumps({"settings": extraction_settings(config)}))
+    assert features_are_current(config)
+    config["tracking"]["min_confidence"] = 0.95          # a changed setting must force re-extraction
+    assert not features_are_current(config)
+    config["tracking"]["min_confidence"] = 0.8
+    (tmp_path / "data" / "manifest.csv").write_text("recording_id\n02\n")   # so must a changed manifest
+    assert not features_are_current(config)
+
+
+def test_main_run_with_different_settings_stops_the_run(tmp_path):
+    config = {"enrollment_seeds": [73], "enrollment_sizes": [1, 4, 16], "degradation_enrollment_sizes": [4],
+              "audio_snr_db": [None, 0], "split_seed": 73}
+    with pytest.raises(FileNotFoundError):                # main run not finished yet
+        check_main_run(tmp_path, config)
+    (tmp_path / "run_complete.json").write_text(json.dumps({"status": "complete"}))
+    (tmp_path / "config_resolved.json").write_text(json.dumps(config))
+    check_main_run(tmp_path, config)                      # same settings: fine
+    changed = {**config, "enrollment_sizes": [1, 4, 8]}  # e.g. main scores at k = 16, tracking at k = 8
+    with pytest.raises(ValueError, match="enrollment_sizes"):
+        check_main_run(tmp_path, changed)

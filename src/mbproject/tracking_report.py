@@ -172,27 +172,34 @@ def write_report(config):
     lines_md = [
         "# Facial-tracking study results",
         "",
-        "Made by `python -m mbproject tracking`. Test split, mean of the 10 enrollment seeds, HW3 EER "
-        "unless noted. Same 480 genuine / 11,040 impostor trials as the face/voice study.",
+        f"Made by `python -m mbproject tracking`. Test split, mean of the {len(config['enrollment_seeds'])} "
+        "enrollment seeds, HW3 EER unless noted. Same 480 genuine / 11,040 impostor trials as the face/voice study.",
+        "",
+        "HW3 EER checks 500 fixed thresholds. 'Exact EER' interpolates the ROC curve between the real scores. "
+        "The two agree closely here; for very small EERs, read both.",
         "",
         f"## A. Feature sets (k = {k})",
         "",
-        "| Feature set | Raw EER | LDA EER | LDA d-prime | LDA setting (picked on dev) |",
-        "| --- | --- | --- | --- | --- |",
+        "| Feature set | Raw EER | LDA EER | LDA exact EER | LDA d-prime | LDA setting (picked on dev) |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for n in names:
         lines_md.append(f"| {NAMES[n]} | {percent(feature_eer(n, 'raw', k))} | {percent(feature_eer(n, 'lda', k))} | "
-                        f"{feature_eer(n, 'lda', k, 'dprime_mean'):.2f} | {chosen.loc[n, 'lda']} |")
+                        f"{percent(feature_eer(n, 'lda', k, 'eer_mean'))} | {feature_eer(n, 'lda', k, 'dprime_mean'):.2f} | {chosen.loc[n, 'lda']} |")
     lines_md += ["", f"For comparison at k = {k}: face {percent(system_eer('face', k))}, voice {percent(system_eer('voice', k))}.",
                  "", f"Best feature set on dev data: **{NAMES[info['best_feature_set']]}** ({info['best_lda']}).",
                  "", "![feature sets](figures/feature_sets_eer.png)", "",
                  "## B. Fusion (average of scores)", "",
-                 "| Systems | Clean | 20 dB | 10 dB | 0 dB | FRR at dev FAR 1% (clean) |",
-                 "| --- | --- | --- | --- | --- | --- |"]
+                 "| Systems | Clean | 20 dB | 10 dB | 0 dB | Exact EER (clean) | Test FAR / FRR at dev FAR 1% (clean) | Same at 0 dB |",
+                 "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for systems in ["face", "voice", "au", "tracking", "face+voice", "au+voice", "tracking+voice",
                     "au+face", "au+face+voice", "tracking+face+voice"]:
+        # The threshold is set on dev data for FAR = 1%; show the FAR it really gives on test next to the FRR,
+        # so a lower FRR is not just a looser threshold.
+        operating = [f"{percent(system_eer(systems, k, n, 'far_at_dev_far_0.01_mean'))} / "
+                     f"{percent(system_eer(systems, k, n, 'frr_at_dev_far_0.01_mean'))}" for n in ["clean", "0"]]
         lines_md.append(f"| {systems} | " + " | ".join(percent(system_eer(systems, k, n)) for n in noise) +
-                        f" | {percent(system_eer(systems, k, column='frr_at_dev_far_0.01_mean'))} |")
+                        f" | {percent(system_eer(systems, k, column='eer_mean'))} | {operating[0]} | {operating[1]} |")
     lines_md += ["", "Noise is added to the probe audio only. Face and tracking come from the clean video.", "",
                  "![noise](figures/noise_voice_fusion.png)", "",
                  "## C. Enrollment size", "",
@@ -214,7 +221,12 @@ def write_report(config):
                  "Controls use the interpolated ROC EER and the first enrollment seed (not the 10-seed HW3 EER above).",
                  "- shuffled_labels: probe identities scrambled; scores should fall to chance (about 50%).",
                  "- unseen_actors_raw / _lda: actors excluded from LDA fitting. z-score and LDA learned on 12 actors, tested on the other 12 "
-                 "(20 random splits). LDA settings were chosen earlier on dev data from all 24 actors.",
-                 "- same/different_content_pairs: pairs of test recordings with the same or a different sentence + emotion."]
+                 "(20 random splits). Exploratory only: the LDA settings and best feature set were chosen on dev data "
+                 "from all 24 actors, and this control also changes the training population, the claimed-identity roster "
+                 "and the maximum LDA dimensions, so the gap is not only 'LDA learning these actors'.",
+                 "- same/different_stimulus_pairs: pairs of test recordings with the same or a different stimulus "
+                 "(statement + emotion + intensity together). It does not separate sentence from emotion; "
+                 "same-stimulus genuine pairs are the two repetitions of that stimulus.",
+                 "- Seed spread measures enrollment resampling only, not new users or sessions."]
     (out / "REPORT.md").write_text("\n".join(lines_md) + "\n", encoding="utf-8")
     print(f"Wrote {out / 'REPORT.md'} and 5 figures (+ HW3 plots)", flush=True)

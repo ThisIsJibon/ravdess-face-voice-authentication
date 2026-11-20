@@ -4,9 +4,9 @@
 
 **Short answer.** Yes. Shape features performed better than movement features:
 - AU-only features with LDA reach 3.77% EER at k = 4. That is close to voice (3.34%) and far behind face appearance (0%).
-- Adding landmark and shape features gives 0.03% EER, but shape features are a form of face geometry, not behavior.
+- Adding landmark and shape features gives 0.03% EER (0.05% with the exact ROC EER, see section 5), but shape features are a form of face geometry, not behavior.
 - Fusing AU with voice cuts voice error by about 4x (3.34% to 0.85% at k = 4). Under 0 dB noise it cuts error from 13.86% to 2.07%, because the face video is unaffected by audio noise.
-- LDA learns from the same 24 actors (20 enrollment recordings each), while each template uses only k recordings. So the 3.77% answers a question about these 24 known actors. When LDA is fitted without 12 of the actors and tested on them, AU + LDA gives 17.5% EER and all-tracking + LDA gives 4.5%.
+- LDA learns from the same 24 actors (20 enrollment recordings each), while each template uses only k recordings. So the 3.77% answers a question about these 24 known actors. In an exploratory check where LDA is fitted without 12 of the actors and tested on them, AU + LDA gives 17.5% EER and all-tracking + LDA gives 4.5% (section 6).
 - On movement alone: AU frame-to-frame change (velocity) gives 12.40%, all movement features 3.37%, and all shape features 0.43% (all with LDA). Shape works better on these recordings; we did not measure how much of the 0.03% combined result comes from shape.
 
 Unless noted, numbers are test-split means over 10 enrollment seeds, HW3 EER, on the same trials as the main study (the controls in section 6 use a different setup, explained there). Full tables: `results/tracking/REPORT.md` (generated).
@@ -34,8 +34,8 @@ Each recording is summarized into six blocks. Each block uses only that recordin
 | Block | How it is computed | Size | Measures |
 | --- | --- | --- | --- |
 | AU level | mean of each AU over frames | 17 | typical expression strength |
-| AU motion | standard deviation of each AU | 17 | how much each AU varies |
-| AU velocity | mean of absolute change between consecutive frames | 17 | how fast the face moves |
+| AU motion | standard deviation of each AU | 17 | how much each AU varies (ignores frame order) |
+| AU velocity | mean of absolute change between consecutive frames (per frame, not per second) | 17 | how much the face changes from one frame to the next |
 | Landmark shape | mean of normalized landmarks | 136 | face geometry |
 | Landmark motion | standard deviation of normalized landmarks | 136 | how the face shape moves |
 | PDM shape | mean of OpenFace shape parameters `p_0..p_33` | 34 | compact face geometry |
@@ -89,7 +89,9 @@ Raw features mix two things: who the person is, and what they are saying or feel
 | All tracking (357) | 9.92% | **0.03%** |
 | *Reference: voice / face* | *3.34% / 0.00%* | |
 
-Shape features identify people far better than movement features. Without any learning, PDM shape alone (2.93%) already beats every movement set. We did not measure how much of a person's identity comes from shape; we only compared how well each feature set performs. Shape features are face geometry, which overlaps with what SFace captures from appearance.
+The HW3 EER checks 500 fixed thresholds. The exact EER (interpolated ROC) agrees within about 0.05 percentage points for every row, except that the smallest value changes: All tracking is 0.03% with HW3 and 0.05% exact. `REPORT.md` shows both.
+
+Shape feature sets achieved lower EER than movement feature sets in this experiment. Without any learning, PDM shape alone (2.93%) already beats every movement set. We did not measure how much of a person's identity comes from shape; we only compared how well each feature set performs. Shape features are face geometry, which overlaps with what SFace captures from appearance.
 
 **C: enrollment size** (test EER)
 
@@ -111,7 +113,7 @@ For AU and tracking, k changes only the template size. The z-score and LDA are a
 | AU + voice (average of scores) | 0.85% | 1.04% | 1.29% | 2.07% |
 | All tracking + voice (average of scores) | 0.01% | 0.00% | 0.00% | 0.09% |
 
-Fusion uses the team's fixed rule: the plain average of the systems' scores, with thresholds fitted on dev data at k = 16. In practical terms, at the dev threshold for 1% false accepts, voice alone wrongly rejects 6.77% of genuine attempts and AU + voice rejects 0.88%. More fusion combinations (AU + face, AU + face + voice and others) are in `REPORT.md`.
+Fusion uses the team's fixed rule: the plain average of the systems' scores, with thresholds fitted on dev data at k = 16. In practical terms, at the dev threshold for 1% false accepts, voice alone wrongly rejects 6.77% of genuine attempts and AU + voice rejects 0.88%. Both keep about the same test false-accept rate (0.93% each), so the lower rejection rate is not bought with a looser threshold. At 0 dB, voice rejects 90.3% (test FAR 0.03%) and AU + voice rejects 9.5% (test FAR 0.28%). `REPORT.md` lists test FAR and FRR for every system. More fusion combinations (AU + face, AU + face + voice and others) are in `REPORT.md`.
 
 ## 6. Controls
 
@@ -120,22 +122,23 @@ The controls use the interpolated ROC EER (not the HW3 EER) and the first enroll
 | Control | Result | Meaning |
 | --- | --- | --- |
 | Shuffled probe identities | 50.0% (AU), 51.3% (all tracking) | Scores fell to chance after scrambling identities. This is a sanity check; it cannot rule out every kind of leakage |
-| Evaluation on actors excluded from LDA fitting: z-score and LDA fitted on 12 actors, tested on the other 12 (20 splits, k = 4) | AU: 21.5% raw → 17.5% LDA. All tracking: 12.6% → 4.5% | Part of the LDA gain comes from learning these 24 actors. Not fully actor-independent: the LDA settings and the best feature set were picked earlier on dev data from all 24 actors |
-| Test pairs with the same vs different sentence/emotion (AU + LDA) | 2.9% vs 10.4% | What is said still affects AU features even after LDA |
+| Evaluation on actors excluded from LDA fitting: z-score and LDA fitted on 12 actors, tested on the other 12 (20 splits, k = 4) | AU: 21.5% raw → 17.5% LDA. All tracking: 12.6% → 4.5% | Exploratory. The LDA settings and the best feature set were picked earlier on dev data from all 24 actors, and this control also changes the training population, the claimed-identity roster and the maximum number of LDA dimensions. So the gap suggests, but does not prove, that part of the LDA gain comes from learning these actors |
+| Test pairs with the same vs different stimulus (AU + LDA). A stimulus is statement + emotion + intensity together | 2.9% vs 10.4% | The stimulus still affects AU features after LDA. This does not separate the sentence from the emotion, and same-stimulus genuine pairs are the two repetitions of one stimulus |
 
 ## 7. Limitations
 
 - **One session and 24 actors.** Shape features look excellent partly because each actor was filmed once, with the same camera and pose.
 - **LDA learns from the enrolled users.** SFace and ECAPA were trained on other people. The excluded-actor control shows the size of this gap, but its settings were chosen on all 24 actors, so it is not a fully independent new-user test.
 - **No blur or degradation test for tracking.** The tracking CSVs were computed from clean video. Testing blur would need OpenFace re-run on blurred video.
-- **Shape is not behavior.** Only the movement sets (AU motion, AU velocity, landmark motion) measure behavior; the strong results come from geometry.
+- **Shape is not behavior.** Only the movement sets (AU motion, AU velocity, landmark motion) measure behavior. Geometry feature sets achieved lower EER in this experiment; we did not measure which features cause the combined result.
+- **Uncertainty.** The spread over the 10 seeds only measures which clips were picked for enrollment. It does not measure variation across new users or sessions, and we did not compute paired confidence intervals.
 
 ## 8. How to reproduce
 
 After the main pipeline (`python -m mbproject all`) has finished:
 
 1. Put `FacialTracking_Actors_01-24.zip` (or its extracted folder) in `RAVDESS/`.
-2. Run `.venv/bin/python -m mbproject tracking` (on Windows: `.\.venv\Scripts\python.exe -m mbproject tracking`). It takes about 1 to 2 minutes. Use `--refresh` to re-extract features.
+2. Run `.venv/bin/python -m mbproject tracking` (on Windows: `.\.venv\Scripts\python.exe -m mbproject tracking`). It takes about 1 to 2 minutes. Features are re-extracted automatically if the settings, manifest, archive or extraction code changed; `--refresh` forces it. The run stops if the main face/voice run is missing or used different seeds, enrollment sizes or noise levels.
 3. Outputs go to `data/tracking/` (features and frame quality) and `results/tracking/`:
    - `REPORT.md` (all tables)
    - `summary.csv`, `metrics.csv` (Experiments A and C)
