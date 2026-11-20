@@ -1,6 +1,6 @@
 # Mobile Biometrics Final Project
 
-Python implementation of RAVDESS face + voice **identity verification** for the three approved research questions. This repository contains the experiments and a working claim-verification demo. It does not contain the final report or presentation.
+Python implementation of RAVDESS face + voice **identity verification** for the three approved research questions. This repository contains the experiments, a working claim-verification demo and the final report (`Mobile_Biometrics_Report.docx`). The presentation is not included.
 
 ## Run on this computer
 
