@@ -28,6 +28,15 @@ def percent(value):
     return f"{100 * value:.2f}%"
 
 
+def eer_method_note(summary, fusion, k):
+    """Sentence comparing the two EER methods, using the real gap in the k tables."""
+    rows = pd.concat([summary[(summary.representation == "lda") & (summary.k == k)],
+                      fusion[(fusion.k == k) & (fusion.audio_snr_db.astype(str) == "clean")]])
+    gap = 100 * (rows.hw3_eer_mean - rows.eer_mean).abs().max()
+    return ("HW3 EER checks 500 fixed thresholds. 'Exact EER' interpolates the ROC curve between the real scores. "
+            f"In tables A and B (k = {k}) the two differ by at most {gap:.2f} percentage points; for very small EERs, read both.")
+
+
 def plot_example_scores(scores_path, figures, seed, reference_k, best_label):
     """Figures 4 and 5 plus the HW3 plots, drawn from the saved example scores.
 
@@ -140,7 +149,7 @@ def write_report(config):
         ax.plot(sizes, [100 * system_eer(systems, s) for s in sizes], style, marker="o", color=color, label=label)
     ax.set_xscale("log", base=2)
     ax.set_xticks(sizes, [str(s) for s in sizes])
-    ax.set_xlabel("Enrollment recordings per person (k)")
+    ax.set_xlabel("Recordings in each template (k); AU/tracking LDA always learned from 20 per person")
     ax.set_ylabel("Test EER (%)")
     ax.set_title("Error vs enrollment size")
     ax.legend(fontsize=8)
@@ -175,8 +184,7 @@ def write_report(config):
         f"Made by `python -m mbproject tracking`. Test split, mean of the {len(config['enrollment_seeds'])} "
         "enrollment seeds, HW3 EER unless noted. Same 480 genuine / 11,040 impostor trials as the face/voice study.",
         "",
-        "HW3 EER checks 500 fixed thresholds. 'Exact EER' interpolates the ROC curve between the real scores. "
-        "The two agree closely here; for very small EERs, read both.",
+        eer_method_note(summary, fusion, k),
         "",
         f"## A. Feature sets (k = {k})",
         "",
@@ -203,11 +211,16 @@ def write_report(config):
     lines_md += ["", "Noise is added to the probe audio only. Face and tracking come from the clean video.", "",
                  "![noise](figures/noise_voice_fusion.png)", "",
                  "## C. Enrollment size", "",
+                 "k changes only the template size. For AU and tracking, the z-score and LDA are always learned from "
+                 "all 20 enrollment clips per actor, so these rows show a fixed learned representation with a growing "
+                 "template, not AU working with only k enrollment clips in total.", "",
                  "| System | " + " | ".join(f"k={s}" for s in sizes) + " |",
                  "| --- | " + " | ".join("---" for _ in sizes) + " |"]
     for systems, label, *_ in lines:
         lines_md.append(f"| {label} | " + " | ".join(percent(system_eer(systems, s)) for s in sizes) + " |")
     lines_md += ["", "![enrollment](figures/eer_vs_enrollment.png)", "",
+                 "*Figure: test EER vs template size k. AU and tracking z-score + LDA always use all 20 enrollment "
+                 "clips per actor.*", "",
                  f"## D. Score distributions and ROC/DET (seed {seed}, k = {reference_k}, clean)", "",
                  "Same seed and k as the main study's plots. The HW3 script's own score distribution, "
                  "DET and ROC plots for AU and AU + voice are in `figures/hw3_original/`.", "",

@@ -12,6 +12,7 @@ We summarize each video (about 110 frames) into a few fixed-length vectors
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import zipfile
@@ -151,6 +152,22 @@ def summarize_recording(table, min_confidence, min_frames):
     return blocks, quality
 
 
+def source_fingerprint(source):
+    """A hash of the tracking data itself, so changed CSV contents are noticed.
+
+    ZIP: hash of the whole file. Folder: hash of every CSV's relative path and
+    contents, in sorted order (so the result does not depend on listing order).
+    """
+    source = Path(source)
+    if source.is_file():
+        return sha256(source)
+    combined = hashlib.sha256()
+    for path in sorted(source.rglob("*.csv")):
+        combined.update(str(path.relative_to(source)).encode())
+        combined.update(sha256(path).encode())
+    return combined.hexdigest()
+
+
 def extraction_settings(config):
     """Everything that changes the extracted features: the source archive, the
     frame filters, the manifest and this file's code. Saved next to the features
@@ -159,7 +176,7 @@ def extraction_settings(config):
     settings = config["tracking"]
     return {
         "source": source.name,
-        "source_bytes": source.stat().st_size if source.is_file() else None,
+        "source_sha256": source_fingerprint(source),
         "min_confidence": settings["min_confidence"],
         "min_frames": settings["min_frames"],
         "manifest_sha256": sha256(Path(config["data_dir"]) / "manifest.csv"),

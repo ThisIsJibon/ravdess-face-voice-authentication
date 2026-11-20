@@ -8,7 +8,7 @@ import pytest
 from mbproject.tracking import (AU_COLUMNS, SHAPE_COLUMNS, X_COLUMNS, Y_COLUMNS, extraction_settings,
                                 features_are_current, normalize_landmarks, summarize_recording)
 from mbproject.tracking_eval import Embedding, check_main_run, check_trial_index, save_plot_scores
-from mbproject.tracking_report import plot_example_scores
+from mbproject.tracking_report import eer_method_note, plot_example_scores
 
 
 def fake_tracking_csv(frames=40, confidence=0.95, seed=0):
@@ -151,3 +151,32 @@ def test_main_run_with_different_settings_stops_the_run(tmp_path):
     changed = {**config, "enrollment_sizes": [1, 4, 8]}  # e.g. main scores at k = 16, tracking at k = 8
     with pytest.raises(ValueError, match="enrollment_sizes"):
         check_main_run(tmp_path, changed)
+
+
+def test_changed_zip_contents_of_the_same_size_are_noticed(tmp_path):
+    config = fake_tracking_config(tmp_path)
+    (tmp_path / "data" / "tracking" / "extraction.json").write_text(json.dumps({"settings": extraction_settings(config)}))
+    assert features_are_current(config)
+    (tmp_path / "RAVDESS" / "Tracking.zip").write_bytes(b"FAKE ARCHIVE")      # same size, new contents
+    assert not features_are_current(config)
+
+
+def test_changed_csv_in_an_extracted_folder_is_noticed(tmp_path):
+    config = fake_tracking_config(tmp_path)
+    (tmp_path / "RAVDESS" / "Tracking.zip").unlink()                         # use a folder instead of a ZIP
+    folder = tmp_path / "RAVDESS" / "Tracking" / "Actor_01"
+    folder.mkdir(parents=True)
+    (folder / "01-01-01-01-01-01-01.csv").write_text("frame,confidence\n1,0.9\n")
+    (tmp_path / "data" / "tracking" / "extraction.json").write_text(json.dumps({"settings": extraction_settings(config)}))
+    assert features_are_current(config)
+    (folder / "01-01-01-01-01-01-01.csv").write_text("frame,confidence\n1,0.5\n")
+    assert not features_are_current(config)
+
+
+def test_eer_note_reports_the_real_gap_between_methods():
+    # HW3 says 10%, the exact ROC EER says 2%: the note must say 8.00 points, not "they agree".
+    summary = pd.DataFrame({"representation": ["lda"], "k": [4], "hw3_eer_mean": [0.10], "eer_mean": [0.02]})
+    fusion = pd.DataFrame({"k": [4], "audio_snr_db": ["clean"], "hw3_eer_mean": [0.03], "eer_mean": [0.03]})
+    note = eer_method_note(summary, fusion, 4)
+    assert "8.00 percentage points" in note
+    assert "agree" not in note
