@@ -54,7 +54,7 @@ The additional seeds examine variation in enrollment selection. They do not incr
 - Each actor: **20 enrollment-pool, 20 development, 20 test recordings**. The two repetitions of each stimulus group stay together. A stimulus group is channel/emotion/intensity/statement, shared across actors. Group assignment is fixed using seed 73.
 - Each test condition: **480 genuine and 11,040 impostor trials**. Every probe claims each of the 24 enrolled identities; the own-actor claim is genuine, other claims are impostors. Face and voice use the same probe and claimed actor on every fusion trial.
 - All sampled frames of a recording are pooled into **one recording embedding**. Frames are never counted as independent enrollment samples or independent tests.
-- Frozen pretrained identity encoders: SpeechBrain ECAPA-TDNN (192 dimensions) for voice and OpenCV SFace (128 dimensions) with YuNet detection/alignment for face. No RAVDESS fine-tuning or test-dependent feature selection. Expression action units are not used as identity features.
+- Frozen pretrained identity encoders: SpeechBrain ECAPA-TDNN (192 dimensions) for voice and OpenCV SFace (128 dimensions) with YuNet detection/alignment for face. No RAVDESS fine-tuning or test-dependent feature selection. The main pipeline does not use expression action units as identity features; the separate facial-tracking study below tests them as an alternative face representation.
 - A template is the L2-normalized average of the selected clean recording embeddings. Prefixes of a saved random order make enrollment subsets nested. The same ordering is used for both modalities when their enrollment counts match.
 - Matching is cosine similarity, mapped by `(cosine + 1) / 2` into [0, 1] using a fixed theoretical transformation. A higher score means stronger evidence for a match. Fixed fusion uses 50% face and 50% voice. Tuned fusion selects a face weight from 0.1 through 0.9, using reference-enrollment development EER, then development FRR at FAR 1%, with ties preferring weights near 0.5.
 - Every system's decision thresholds and fusion weight are fitted at **16 clean enrollment recordings**, separately for each enrollment seed, then frozen for all enrollment sizes and degradation levels. This keeps the enrollment comparison from also changing calibration.
@@ -123,7 +123,7 @@ The supplied instructor feedback approves RAVDESS. Use is educational and local;
 
 ## Facial-tracking study (action units and landmarks)
 
-An additional study tests the RAVDESS facial-tracking release (OpenFace action units and landmarks) for authentication, using the same splits, trials and metrics. After `all`, put `FacialTracking_Actors_01-24.zip` in `RAVDESS/` and run `python -m mbproject tracking`. Method and results: [docs/TRACKING_STUDY.md](docs/TRACKING_STUDY.md).
+An additional study tests the RAVDESS facial-tracking release (OpenFace action units and landmarks) as an alternative feature representation of the face, alone and fused with voice and SFace, using the same splits, trials and metrics. After `all`, put `FacialTracking_Actors_01-24.zip` in `RAVDESS/` and run `python -m mbproject tracking`. Method and results: [docs/TRACKING_STUDY.md](docs/TRACKING_STUDY.md).
 
 For cloning, dataset placement, installation on another machine, and team branches, see [TEAM_SETUP.md](TEAM_SETUP.md).
 

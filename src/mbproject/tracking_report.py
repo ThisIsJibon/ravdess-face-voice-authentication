@@ -127,8 +127,11 @@ def write_report(config):
     positions = range(len(names))
     ax.barh([p + 0.2 for p in positions], [100 * feature_eer(n, "raw", k) for n in names],
             height=0.4, color="#b0b7c3", label="raw (z-score only)")
-    ax.barh([p - 0.2 for p in positions], [100 * feature_eer(n, "lda", k) for n in names],
-            height=0.4, color="#2f6db5", label="with LDA")
+    lda_values = [100 * feature_eer(n, "lda", k) for n in names]
+    ax.barh([p - 0.2 for p in positions], lda_values, height=0.4, color="#2f6db5", label="with LDA")
+    # Write each LDA value next to its bar: some are too small to see (e.g. 0.03%).
+    for p, value in zip(positions, lda_values):
+        ax.text(value + 0.3, p - 0.2, f"{value:.2f}%", va="center", fontsize=7, color="#2f6db5")
     ax.axvline(100 * system_eer("voice", k), color="#c0392b", ls="--", label="voice")
     ax.set_yticks(list(positions), [NAMES[n] for n in names])
     ax.invert_yaxis()
@@ -173,9 +176,8 @@ def write_report(config):
     plt.close(fig)
 
     # ---- Figures 4 and 5 + HW3 plots, from the example scores saved by run_tracking ----
-    plot_example_scores(out / "plot_scores.npz", figures, config["enrollment_seeds"][0],
-                        max(config["enrollment_sizes"]), best_label)
     seed, reference_k = config["enrollment_seeds"][0], max(config["enrollment_sizes"])
+    plot_example_scores(out / "plot_scores.npz", figures, seed, reference_k, best_label)
 
     # ---- REPORT.md ----
     lines_md = [
@@ -225,7 +227,10 @@ def write_report(config):
                  "Same seed and k as the main study's plots. The HW3 script's own score distribution, "
                  "DET and ROC plots for AU and AU + voice are in `figures/hw3_original/`.", "",
                  "![score distributions](figures/score_distributions.png)", "",
-                 "![ROC and DET](figures/roc_det.png)", "", "## Controls", "",
+                 "![ROC and DET](figures/roc_det.png)", "",
+                 "In the DET plot, error rates of exactly 0 are drawn at the edge of the axes (0.001%). "
+                 "This is a single example (one seed), so its EERs differ a little from the 10-seed means above.", "",
+                 "## Controls", "",
                  "| Control | System | EER | std over splits |", "| --- | --- | --- | --- |"]
     for row in controls.groupby(["control", "system"]).eer.agg(["mean", "std"]).reset_index().itertuples():
         spread = "" if pd.isna(row.std) else percent(row.std)

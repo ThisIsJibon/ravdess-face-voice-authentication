@@ -61,7 +61,8 @@ def list_csv_files(source):
     """Map each CSV file name (e.g. '01-01-03-02-01-01-12.csv') to its location."""
     source = Path(source)
     if source.suffix == ".zip":
-        names = zipfile.ZipFile(source).namelist()
+        with zipfile.ZipFile(source) as archive:
+            names = archive.namelist()
     else:
         names = [str(p.relative_to(source)) for p in source.rglob("*.csv")]
     files = {}
@@ -85,7 +86,8 @@ def read_csv(source, files, recording_id):
         raise FileNotFoundError(f"Tracking file {file_name} is missing")
     source = Path(source)
     if source.suffix == ".zip":
-        raw = zipfile.ZipFile(source).read(files[file_name])
+        with zipfile.ZipFile(source) as archive:
+            raw = archive.read(files[file_name])
     else:
         raw = (source / files[file_name]).read_bytes()
     table = pd.read_csv(io.BytesIO(raw), skipinitialspace=True)

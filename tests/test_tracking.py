@@ -1,13 +1,16 @@
 """Tests for the facial-tracking study (no real data needed)."""
 import json
+import zipfile
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from mbproject.tracking import (AU_COLUMNS, SHAPE_COLUMNS, X_COLUMNS, Y_COLUMNS, extraction_settings,
-                                features_are_current, normalize_landmarks, summarize_recording)
-from mbproject.tracking_eval import Embedding, check_main_run, check_trial_index, save_plot_scores
+                                features_are_current, list_csv_files, normalize_landmarks, read_csv,
+                                summarize_recording)
+from mbproject.tracking_eval import (Embedding, check_main_run, check_trial_index, save_plot_scores,
+                                     score_matrix)
 from mbproject.tracking_report import eer_method_note, plot_example_scores
 
 
@@ -89,7 +92,6 @@ def test_misordered_trial_index_stops_the_run(tmp_path):
              claim_actors=actors, genuine=genuine[[1, 0, 2]])
     with pytest.raises(ValueError):
         check_trial_index(path, probes, actors, genuine)
-
 
 
 def test_saved_example_scores_produce_all_plots(tmp_path):
@@ -180,3 +182,31 @@ def test_eer_note_reports_the_real_gap_between_methods():
     note = eer_method_note(summary, fusion, 4)
     assert "8.00 percentage points" in note
     assert "agree" not in note
+
+
+def test_tracking_csv_is_found_by_recording_id_and_mac_files_are_skipped(tmp_path):
+    # Recording "01-03-02-01-01-12" must read tracking file "01-01-03-02-01-01-12.csv"
+    # (leading "01" = audio+video). macOS "._" copies in __MACOSX must be ignored.
+    archive = tmp_path / "Tracking.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("Actor_12/01-01-03-02-01-01-12.csv", "frame, confidence\n1, 0.9\n")
+        z.writestr("__MACOSX/Actor_12/._01-01-03-02-01-01-12.csv", "junk")
+    files = list_csv_files(archive)
+    assert files == {"01-01-03-02-01-01-12.csv": "Actor_12/01-01-03-02-01-01-12.csv"}
+    table = read_csv(archive, files, "01-03-02-01-01-12")
+    assert list(table.columns) == ["frame", "confidence"]        # spaces after commas removed
+    with pytest.raises(FileNotFoundError):
+        read_csv(archive, files, "01-03-02-01-01-13")
+
+
+def test_template_uses_the_first_k_enrollment_recordings():
+    # Same rule as the main study: template = normalized mean of the first k recordings
+    # in the seed's enrollment order; score = (cosine + 1) / 2.
+    embeddings = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [-1.0, 0.0]])
+    row_of = {"a": 0, "b": 1, "probe": 2, "far": 3}
+    orders = {1: ["a", "b"]}
+    k1 = score_matrix(embeddings, row_of, ["probe"], orders, k=1)     # template = [1, 0]
+    k2 = score_matrix(embeddings, row_of, ["probe"], orders, k=2)     # template = [1, 1] / sqrt(2)
+    assert np.isclose(k1[0, 0], (np.cos(np.pi / 4) + 1) / 2)
+    assert np.isclose(k2[0, 0], 1.0)
+    assert np.isclose(score_matrix(embeddings, row_of, ["far"], orders, k=1)[0, 0], 0.0)

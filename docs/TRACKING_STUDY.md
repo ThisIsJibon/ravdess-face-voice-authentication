@@ -2,6 +2,8 @@
 
 **Question.** Can the facial *movement* and *geometry* measurements in the RAVDESS facial-tracking release (OpenFace action units and landmarks) authenticate a person, alone or fused with our face (SFace) and voice (ECAPA) systems? This follows Dr. Neal's suggestion to look at faces while people speak.
 
+**Framing.** The tracking data is not a new modality. It is an alternative feature representation of the **face**, based on action-unit statistics, with supporting landmark experiments. So AU + voice is face + voice fusion with a different face representation, and AU + SFace is fusion of two face representations.
+
 **Short answer.** Yes. Shape features performed better than movement features:
 - AU-only features with LDA reach 3.77% EER at k = 4. That is close to voice (3.34%) and far behind face appearance (0%).
 - Adding landmark and shape features gives 0.03% EER (0.05% with the exact ROC EER, see section 5), but shape features are a form of face geometry, not behavior.
@@ -51,11 +53,12 @@ Nothing about the split or trials is recomputed independently. The code reads th
 | Element | Source |
 | --- | --- |
 | 20 enroll / 20 dev / 20 test recordings per actor, seed 73 | `data/manifest.csv` |
+| Main run finished, with the same seeds, enrollment sizes and noise levels | checked against `results/full/run_complete.json` and `config_resolved.json` |
 | Enrollment orders for the 10 seeds | `enrollment_order()`, checked against `results/full/enrollment/seed_*.json` |
 | Test trials: 480 genuine + 11,040 impostor, same probe order | checked against `results/full/trial_index.npz` |
 | Template | L2-normalized mean of the first k enrollment recordings (same rule) |
 | Score | cosine similarity mapped by (cos + 1) / 2 (same rule) |
-| Metrics | unchanged HW3 evaluator (EER, d-prime) plus interpolated EER and FAR/FRR |
+| Metrics | HW3 evaluator (EER, d-prime) through the same `metrics.py` as the main study, plus interpolated EER and FAR/FRR. `metrics.py` uses a subclass that only speeds up threshold counting (same numbers, see `tests/test_metrics.py`); the HW3 plots use the original class |
 | Thresholds | fitted on dev scores at k = 16, then frozen for every k (same rule) |
 
 ## 4. Learning step: z-score and LDA
@@ -138,7 +141,7 @@ The controls use the interpolated ROC EER (not the HW3 EER) and the first enroll
 After the main pipeline (`python -m mbproject all`) has finished:
 
 1. Put `FacialTracking_Actors_01-24.zip` (or its extracted folder) in `RAVDESS/`.
-2. Run `.venv/bin/python -m mbproject tracking` (on Windows: `.\.venv\Scripts\python.exe -m mbproject tracking`). It takes about 1 to 2 minutes. Features are re-extracted automatically if the settings, manifest, archive or extraction code changed; `--refresh` forces it. The run stops if the main face/voice run is missing or used different seeds, enrollment sizes or noise levels.
+2. Run `.venv/bin/python -m mbproject tracking` (on Windows: `.\.venv\Scripts\python.exe -m mbproject tracking`). It takes about 1 to 2 minutes, plus about 2 minutes the first time features are extracted. Features are re-extracted automatically if the settings, manifest, archive or extraction code changed; `--refresh` forces it. The run stops if the main face/voice run is missing or used different seeds, enrollment sizes or noise levels.
 3. Outputs go to `data/tracking/` (features and frame quality) and `results/tracking/`:
    - `REPORT.md` (all tables)
    - `summary.csv`, `metrics.csv` (Experiments A and C)
@@ -148,3 +151,5 @@ After the main pipeline (`python -m mbproject all`) has finished:
    - `figures/`: feature sets, EER vs enrollment, noise fusion, `score_distributions.png`, `roc_det.png`, and `hw3_original/` (the HW3 script's own score distribution, DET and ROC plots for AU and AU + voice)
 
 Tests: `python -m pytest -q tests/test_tracking.py`.
+
+LDA settings without shrinkage (`s0`) are slightly sensitive to the computer's maths library, so a few movement rows can differ by up to about 0.1 percentage points between machines. The numbers in this document come from one full run.
