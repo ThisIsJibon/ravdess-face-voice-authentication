@@ -7,7 +7,7 @@
 - Adding landmark and shape features gives 0.03% EER (0.05% with the exact ROC EER, see section 5), but shape features are a form of face geometry, not behavior.
 - Fusing AU with voice cuts voice error by about 4x (3.34% to 0.85% at k = 4). Under 0 dB noise it cuts error from 13.86% to 2.07%, because the face video is unaffected by audio noise.
 - LDA learns from the same 24 actors (20 enrollment recordings each), while each template uses only k recordings. So the 3.77% answers a question about these 24 known actors. In an exploratory check where LDA is fitted without 12 of the actors and tested on them, AU + LDA gives 17.5% EER and all-tracking + LDA gives 4.5% (section 6).
-- On movement alone: AU frame-to-frame change (velocity) gives 12.40%, all movement features 3.37%, and all shape features 0.43% (all with LDA). Shape works better on these recordings; we did not measure how much of the 0.03% combined result comes from shape.
+- On movement alone: AU frame-to-frame change (velocity) gives 12.40%, all movement features 3.34%, and all shape features 0.43% (all with LDA). Shape works better on these recordings; we did not measure how much of the 0.03% combined result comes from shape.
 
 Unless noted, numbers are test-split means over 10 enrollment seeds, HW3 EER, on the same trials as the main study (the controls in section 6 use a different setup, explained there). Full tables: `results/tracking/REPORT.md` (generated).
 
@@ -81,15 +81,15 @@ Raw features mix two things: who the person is, and what they are saying or feel
 | AU motion (17) | 26.38% | 19.26% |
 | AU velocity (17) | 20.23% | 12.40% |
 | AU all (51) | 19.76% | **3.77%** |
-| Landmark motion (136) | 33.12% | 7.42% |
-| All movement (170) | 27.98% | 3.37% |
+| Landmark motion (136) | 33.12% | 7.37% |
+| All movement (170) | 27.98% | 3.34% |
 | PDM shape (34) | 2.93% | 0.33% |
 | Landmark shape (136) | 10.55% | 0.82% |
 | All shape (170) | 7.94% | 0.43% |
 | All tracking (357) | 9.92% | **0.03%** |
 | *Reference: voice / face* | *3.34% / 0.00%* | |
 
-The HW3 EER checks 500 fixed thresholds. The exact EER (interpolated ROC) agrees within about 0.05 percentage points for every row, except that the smallest value changes: All tracking is 0.03% with HW3 and 0.05% exact. `REPORT.md` shows both.
+The HW3 EER checks 500 fixed thresholds. The exact EER (interpolated ROC) differs from it by at most 0.04 percentage points in this table. That only matters for the smallest value: All tracking is 0.03% with HW3 and 0.05% exact. `REPORT.md` shows both.
 
 Shape feature sets achieved lower EER than movement feature sets in this experiment. Without any learning, PDM shape alone (2.93%) already beats every movement set. We did not measure how much of a person's identity comes from shape; we only compared how well each feature set performs. Shape features are face geometry, which overlaps with what SFace captures from appearance.
 
@@ -121,7 +121,7 @@ The controls use the interpolated ROC EER (not the HW3 EER) and the first enroll
 
 | Control | Result | Meaning |
 | --- | --- | --- |
-| Shuffled probe identities | 50.0% (AU), 51.3% (all tracking) | Scores fell to chance after scrambling identities. This is a sanity check; it cannot rule out every kind of leakage |
+| Shuffled probe identities | 50.2% (AU), 51.3% (all tracking) | Scores fell to chance after scrambling identities. This is a sanity check; it cannot rule out every kind of leakage |
 | Evaluation on actors excluded from LDA fitting: z-score and LDA fitted on 12 actors, tested on the other 12 (20 splits, k = 4) | AU: 21.5% raw → 17.5% LDA. All tracking: 12.6% → 4.5% | Exploratory. The LDA settings and the best feature set were picked earlier on dev data from all 24 actors, and this control also changes the training population, the claimed-identity roster and the maximum number of LDA dimensions. So the gap suggests, but does not prove, that part of the LDA gain comes from learning these actors |
 | Test pairs with the same vs different stimulus (AU + LDA). A stimulus is statement + emotion + intensity together | 2.9% vs 10.4% | The stimulus still affects AU features after LDA. This does not separate the sentence from the emotion, and same-stimulus genuine pairs are the two repetitions of one stimulus |
 
