@@ -115,34 +115,34 @@ The repository owner should create an empty GitHub repository, then run these co
 
 ```text
 git init
-git branch -M main
+git branch -M master
 git add .
 git status --short
 git diff --cached --stat
 git commit -m "Add face and voice authentication research pipeline"
 git remote add origin https://github.com/YOUR-OWNER/ravdess-face-voice-authentication.git
-git push -u origin main
+git push -u origin master
 ```
 
 Review the staged files before committing. Dataset archives, extracted data, embeddings, templates, model weights, environments, homework archives and generated results should not appear. Ignore rules do not remove files that were already tracked. If this is an existing Git repository, inspect its current branch and remotes instead of blindly repeating initialization or adding an existing remote.
 
 ### Owner setup
 
-After the initial project upload, invite teammates as collaborators with write access through the repository settings. Teammates accept the invitation before contributing. Configure protection for `main` to require pull requests and owner review where your GitHub plan supports it. The team rule is that only the repository owner merges into `main`.
+After the initial project upload, invite teammates as collaborators with write access through the repository settings. Teammates accept the invitation before contributing. Configure protection for `master` to require pull requests and owner review where your GitHub plan supports it. The team rule is that only the repository owner merges into `master`.
 
 ### Teammate workflow in the browser
 
-1. Open the owner's repository on GitHub and select `main` in the branch selector.
-2. Create a new branch from the current `main`, using a descriptive name such as `feature/noise-analysis` or `fix/metric-labels`. Use a separate branch for each task.
+1. Open the owner's repository on GitHub and select `master` in the branch selector.
+2. Create a new branch from the current `master`, using a descriptive name such as `feature/noise-analysis` or `fix/metric-labels`. Use a separate branch for each task.
 3. Confirm the branch selector shows your new branch before changing files.
 4. Open the source or documentation file you want to change and select the edit action. Make your changes and preview Markdown when appropriate. For new files, use the repository's add-file action. You can also upload deliberately selected source files changed in a downloaded snapshot.
-5. Commit the changes to your feature branch with a clear message. Repeat for other files belonging to the same task. Do not commit directly to `main`.
+5. Commit the changes to your feature branch with a clear message. Repeat for other files belonging to the same task. Do not commit directly to `master`.
 6. Test changes when possible. For local testing without cloning, download the latest ZIP of your feature branch and follow sections 2-6. Do not claim tests passed unless you ran them. State clearly in the pull request if changes were not tested.
-7. Open a pull request with `main` as the base and your feature branch as the compare branch, both in the owner's repository.
+7. Open a pull request with `master` as the base and your feature branch as the compare branch, both in the owner's repository.
 8. Give the pull request a descriptive title. Explain what changed, why, how you tested it, and any effect on experiment configuration or existing results.
 9. Review the Files changed view and request review from the repository owner. Check that the pull request contains only your intended changes.
 10. Address review comments by editing and committing to the same branch. The existing pull request updates automatically. The owner handles approval and merging; teammates should not merge their own pull requests.
-11. After the owner merges, create your next task branch from the updated `main`.
+11. After the owner merges, create your next task branch from the updated `master`.
 
 ### Files to keep out of GitHub
 
