@@ -35,6 +35,22 @@ There are **61 conditions x 10 enrollment seeds x 4 systems = 2,440 evaluations*
 
 An additional 30-seed evaluation is configured in `configs/study_30_seeds.yaml`. It includes the original ten enrollment seeds and 20 additional unique seeds, using the same dataset partitions, models, enrollment sizes, conditions, and evaluation systems.
 
+The revised submission report uses **30 enrollment seeds throughout RQ1, RQ2, RQ3 and the AU extension**. Use **HW3 EER** as the primary metric in the slides as well: clean voice at k = 1 to 16 is **7.31% to 2.21%**. The **7.32%** starting value is the supplementary interpolated ROC EER for the same 30 seeds. The earlier **7.69% to 2.22%** figures describe the original ten-seed HW3 run.
+
+`configs/study_submission_30_seeds.yaml` reproduces the submission's core, RQ2 weight sweep and tracking study. `configs/study_strong_blur_30_seeds.yaml` reproduces its full stronger-blur grid using the separate `data/strong_blur` feature cache. Verified submission outputs are `results/30_seeds/`, `results/30_seeds/rq2_weights/`, `results/tracking_30_seeds/` and `results/strong_blur_30_seeds/`. Each comparison uses the same 30 seeds; the AU controls explicitly use the first seed and their own stated actor splits.
+
+```bash
+python -m mbproject --config configs/study_submission_30_seeds.yaml evaluate
+python -m mbproject --config configs/study_submission_30_seeds.yaml rq2
+python -m mbproject --config configs/study_submission_30_seeds.yaml tracking
+python -m mbproject --config configs/study_strong_blur_30_seeds.yaml prepare
+python -m mbproject --config configs/study_strong_blur_30_seeds.yaml extract
+python -m mbproject --config configs/study_strong_blur_30_seeds.yaml evaluate
+python -m mbproject --config configs/study_strong_blur_30_seeds.yaml plots
+```
+
+Use the revised report tables for the other slide results too. For example, the 30-seed k = 4 noisy-voice comparison is **13.76% voice versus 2.01% AU + voice**. At k = 16 with 0 dB audio and sigma 4 blur, mean HW3 EER is **11.43% voice, 1.53% face and 0.76% fusion**. These are enrollment-seed means, not additional independent test recordings.
+
 The extended run contains **61 conditions x 30 enrollment seeds x 4 systems = 7,320 evaluations**.
 
 Run the extended evaluation and regenerate its figures with:

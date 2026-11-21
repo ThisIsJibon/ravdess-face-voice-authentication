@@ -228,14 +228,14 @@ def write_report(config, info):
                  "![score distributions](figures/score_distributions.png)", "",
                  "![ROC and DET](figures/roc_det.png)", "",
                  "In the DET plot, error rates of exactly 0 are drawn at the edge of the axes (0.001%). "
-                 "This is a single example (one seed), so its EERs differ a little from the 10-seed means above.", "",
+                 "This is a single example (one seed), so its EERs differ a little from the enrollment-seed means above.", "",
                  "## Controls", "",
                  "| Control | System | EER | std over splits |", "| --- | --- | --- | --- |"]
     for row in controls.groupby(["control", "system"]).eer.agg(["mean", "std"]).reset_index().itertuples():
         spread = "" if pd.isna(row.std) else percent(row.std)
         lines_md.append(f"| {row.control} | {row.system} | {percent(row.mean)} | {spread} |")
     lines_md += ["",
-                 "Controls use the interpolated ROC EER and the first enrollment seed (not the 10-seed HW3 EER above).",
+                 "Controls use the interpolated ROC EER and the first enrollment seed (not the enrollment-seed mean HW3 EER above).",
                  "- shuffled_labels: probe identities scrambled; scores should fall to chance (about 50%).",
                  "- unseen_actors_raw / _lda: actors excluded from LDA fitting. z-score and LDA learned on 12 actors, tested on the other 12 "
                  "(20 random splits). Exploratory only: the LDA settings and best feature set were chosen on dev data "

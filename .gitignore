@@ -9,6 +9,7 @@ data_*/
 models/
 results/
 *.zip
+output/
 
 # Local secrets and machine-specific files
 .env
@@ -27,3 +28,4 @@ Thumbs.db
 Project_Description.pdf
 docs/*.docx
 Mobile_Biometrics_Report.docx
+*.pptx

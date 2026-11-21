@@ -1,0 +1,147 @@
+# Submission protocol: 30 common enrollment seeds, original feature cache.
+dataset_dir: RAVDESS
+data_dir: data
+model_dir: models
+results_dir: results/30_seeds
+split_seed: 73
+enrollment_seeds:
+- 73
+- 101
+- 211
+- 307
+- 401
+- 503
+- 601
+- 701
+- 809
+- 907
+- 1009
+- 1103
+- 1201
+- 1301
+- 1409
+- 1511
+- 1601
+- 1709
+- 1801
+- 1901
+- 2003
+- 2111
+- 2203
+- 2309
+- 2411
+- 2503
+- 2609
+- 2707
+- 2801
+- 2903
+enrollment_sizes:
+- 1
+- 2
+- 4
+- 8
+- 12
+- 16
+degradation_enrollment_sizes:
+- 1
+- 4
+- 16
+audio_snr_db:
+- null
+- 20
+- 10
+- 0
+face_blur_sigma:
+- 0
+- 1
+- 2
+- 4
+frame_fractions:
+- 0.25
+- 0.5
+- 0.75
+far_targets:
+- 0.01
+- 0.001
+- 0.0001
+face_weight_candidates:
+- 0.1
+- 0.2
+- 0.3
+- 0.4
+- 0.5
+- 0.6
+- 0.7
+- 0.8
+- 0.9
+device: auto
+torch_threads: 4
+bootstrap_replicates: 1000
+rq2:
+  enrollment_sizes:
+  - 1
+  - 2
+  - 4
+  face_weights:
+  - 0.0
+  - 0.1
+  - 0.2
+  - 0.3
+  - 0.4
+  - 0.5
+  - 0.6
+  - 0.7
+  - 0.8
+  - 0.9
+  - 1.0
+  far_target: 0.001
+tracking:
+  archive: FacialTracking_Actors_01-24
+  min_confidence: 0.8
+  min_frames: 10
+  output_dir: results/tracking_30_seeds
+  feature_sets:
+    au_level:
+    - au_level
+    au_motion:
+    - au_motion
+    au_velocity:
+    - au_velocity
+    au_level_motion:
+    - au_level
+    - au_motion
+    au_all:
+    - au_level
+    - au_motion
+    - au_velocity
+    lmk_shape:
+    - lmk_shape
+    lmk_motion:
+    - lmk_motion
+    pdm_shape:
+    - pdm_shape
+    movement_all:
+    - au_motion
+    - au_velocity
+    - lmk_motion
+    shape_all:
+    - lmk_shape
+    - pdm_shape
+    tracking_all:
+    - au_level
+    - au_motion
+    - au_velocity
+    - lmk_shape
+    - lmk_motion
+    - pdm_shape
+  lda_dimensions:
+  - 8
+  - 15
+  - 23
+  lda_shrinkage:
+  - 0.0
+  - 0.1
+  - 0.3
+  - 0.6
+  selection_enrollment_size: 4
+  unseen_actor_splits: 20
