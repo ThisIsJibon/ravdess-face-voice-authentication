@@ -48,6 +48,28 @@ Its outputs are stored separately under `results/30_seeds/`. The original `confi
 
 The additional seeds examine variation in enrollment selection. They do not increase the number of independent test recordings: each condition still contains 480 genuine and 11,040 impostor comparisons. The original ten seeds are included in the 30-seed run, so comparisons between the two runs are overlapping rather than independent replications.
 
+### Extended RQ3 blur evaluation
+
+The original blur levels (sigma 0-2) leave face verification at 0% EER, so an additional run in `configs/study_strong_blur.yaml` adds two heavier levels: **face blur sigma 0, 1, 2, 4, 6, 8**. Everything else (seeds, splits, models, SNR levels, enrollment sizes) is identical to `configs/study.yaml`, so sigma 0-4 reproduce the original numbers exactly.
+
+The run contains **85 conditions x 10 enrollment seeds x 4 systems = 3,400 evaluations**. It needs its own feature extraction because the blur levels are part of the feature-cache signature:
+
+```powershell
+& .\.venv\Scripts\python.exe -u -m mbproject --config configs/study_strong_blur.yaml all
+```
+
+Outputs are stored separately under `data_strong_blur/` and `results/strong_blur/`; `results/full/` is not touched. On a GTX 1650 laptop GPU the full run took about 30 minutes.
+
+Main result (k=16, clean audio): face EER rises to 9.67% at sigma 6 and 28.15% at sigma 8, with 83.6% and 100% of genuine users rejected at the frozen clean development FAR=1% threshold. Equal-weight fusion keeps EER at 0.90% and 1.77%, but at sigma 8 it rejects 11.25% of genuine users versus 3.23% for clean voice alone, because the fused threshold is calibrated on clean data.
+
+### RQ3 severity curves
+
+`mbproject plots` also writes `figures/rq3_severity_curves_k{1,4,16}.png` (EER and FRR at the frozen development FAR=1% threshold versus noise only, blur only, and both together; mean +/- SD over seeds) and `rq3_summary.csv`, so the k=1 and k=4 degradation results are visible alongside the k=16 heatmaps.
+
+### Running on Google Colab
+
+Colab exports `MPLBACKEND=module://matplotlib_inline...`, which the project's separate Python 3.11 environment cannot load. The package now falls back to the file-only `Agg` backend in that case, so `python -m mbproject all` runs unchanged on Colab.
+
 ## Data and protocol
 
 - 24 actors, 60 speech recordings each: **1,440 naturally paired audio/video recordings**. Identity and every stimulus field must match across modalities. Song is excluded to keep all actors equally represented. Duplicate video-only encodings are excluded.

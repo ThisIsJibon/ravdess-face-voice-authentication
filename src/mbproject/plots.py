@@ -129,6 +129,7 @@ def generate(config):
     axes[1].set_xlabel("RAVDESS actor (descriptive user variation; not a fairness conclusion)")
     save(fig,"per_actor_operating_frr")
     quality_plot(config,save)
+    rq3_curves(config,metrics,out,save)
     # Execute original HW3 plot methods, retaining the submitted code byte-for-byte.
     legacy = folder/"hw3_original"
     legacy.mkdir(exist_ok=True)
@@ -162,3 +163,53 @@ def quality_plot(config,save):
     axes[1].set(xlabel="Gaussian blur sigma (pixels)",ylabel="Laplacian variance",yscale="log",
                 title="Blur check: median and 10th-90th percentiles")
     save(fig,"degradation_manipulation_checks")
+
+
+def rq3_curves(config,metrics,out,save):
+    """RQ3 severity curves for every degradation enrollment size, plus a summary table.
+
+    Columns: audio noise only (face sharp), face blur only (audio clean), and both
+    together at matched severity steps. Rows: EER and FRR at the frozen clean
+    development FAR=1% threshold. Lines are means over enrollment seeds; bands
+    show +/- one standard deviation across seeds.
+    """
+    snrs = ["clean" if v is None else str(v) for v in config["audio_snr_db"]]
+    sigmas = list(config["face_blur_sigma"])
+    data = metrics.assign(audio_snr_db=metrics.audio_snr_db.astype(str))
+    snr_tick = lambda s: s if s == "clean" else f"{s} dB"
+    sweeps = [("Audio noise only (face sharp)",[(s,sigmas[0]) for s in snrs],[snr_tick(s) for s in snrs]),
+              ("Face blur only (audio clean)",[(snrs[0],g) for g in sigmas],[f"sigma {g:g}" for g in sigmas]),
+              ("Both together",list(zip(snrs,sigmas)),[f"{snr_tick(s)}\nsigma {g:g}" for s,g in zip(snrs,sigmas)])]
+    panels = [("eer","EER (%)"),("frr_at_dev_far_0.01","FRR (%) at frozen\nclean dev FAR=1% threshold")]
+    for k in config["degradation_enrollment_sizes"]:
+        subset = data.loc[(data.k_face == k)&(data.k_voice == k)]
+        fig,axes = plt.subplots(2,3,figsize=(14,7.4),layout="constrained",sharey="row")
+        for col,(title,points,ticks) in enumerate(sweeps):
+            x = np.arange(len(points))
+            for row,(metric,ylabel) in enumerate(panels):
+                ax = axes[row,col]
+                for system in SYSTEMS:
+                    values = [subset.loc[(subset.system == system)&(subset.audio_snr_db == snr)
+                                         &(subset.face_sigma == sigma),metric]*100 for snr,sigma in points]
+                    if any(v.empty for v in values):
+                        raise ValueError(f"Missing RQ3 rows for k={k}, system={system}")
+                    mean = np.array([v.mean() for v in values])
+                    sd = np.array([v.std(ddof=1) if len(v) > 1 else 0.0 for v in values])
+                    ax.plot(x,mean,"o-" if system != "fusion_tuned" else "s--",color=COLORS[system],
+                            label=LABELS[system],markersize=4,linewidth=1.6)
+                    ax.fill_between(x,np.clip(mean-sd,0,None),mean+sd,color=COLORS[system],alpha=.12,linewidth=0)
+                ax.set_xticks(x,ticks)
+                if col == 0:
+                    ax.set_ylabel(ylabel)
+                if row == 0:
+                    ax.set_title(title)
+        axes[0,0].legend(fontsize=8)
+        fig.suptitle(f"RQ3 degradation severity, k={k} clean enrollment recordings per modality; mean +/- SD over enrollment seeds")
+        save(fig,f"rq3_severity_curves_k{k}")
+    table = (data.loc[(data.k_face == data.k_voice)&data.k_face.isin(config["degradation_enrollment_sizes"])]
+             .groupby(["k_face","audio_snr_db","face_sigma","system"])
+             [["eer","frr_at_dev_far_0.01","far_at_dev_far_0.01"]].agg(["mean","std"]))
+    table.columns = ["_".join(c) for c in table.columns]
+    table = table.reset_index().rename(columns={"k_face":"k"})
+    table["audio_snr_db"] = pd.Categorical(table.audio_snr_db,snrs,ordered=True)
+    table.sort_values(["k","audio_snr_db","face_sigma","system"]).to_csv(out/"rq3_summary.csv",index=False)
