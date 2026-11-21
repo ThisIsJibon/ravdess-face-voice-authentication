@@ -5,6 +5,7 @@ __pycache__/
 RAVDESS/
 Homeworks/
 data/
+data_*/
 models/
 results/
 *.zip

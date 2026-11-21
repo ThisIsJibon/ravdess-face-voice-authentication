@@ -2,9 +2,9 @@
 
 Python implementation of RAVDESS face + voice **identity verification** for the three approved research questions. This repository contains the experiments, a working claim-verification demo and the final report (`Mobile_Biometrics_Report.docx`). The presentation is not included.
 
-## Run on this computer
+## Run locally
 
-Open PowerShell in `C:\Users\jibon\AcademicWorld\Coding\MBFinalProject`.
+Open PowerShell in the repository root (the folder containing `pyproject.toml`). The commands below use repository-relative paths.
 
 ```powershell
 # Run the full pipeline. Existing valid media/features are reused.
@@ -47,6 +47,36 @@ python -m mbproject --config configs/study_30_seeds.yaml plots
 Its outputs are stored separately under `results/30_seeds/`. The original `configs/study.yaml` and `results/full/` remain unchanged.
 
 The additional seeds examine variation in enrollment selection. They do not increase the number of independent test recordings: each condition still contains 480 genuine and 11,040 impostor comparisons. The original ten seeds are included in the 30-seed run, so comparisons between the two runs are overlapping rather than independent replications.
+
+### Extended RQ3 blur evaluation
+
+The original face blur conditions have 0% EER at sigma 0, 1 and 2, with errors emerging at sigma 4. An additional run in `configs/study_strong_blur.yaml` adds two heavier levels: **face blur sigma 0, 1, 2, 4, 6, 8**. Everything else (seeds, splits, models, SNR levels, enrollment sizes) is identical to `configs/study.yaml`. In the verification run, all 2,440 evaluations shared with the original run reproduced its metrics exactly.
+
+The run contains **85 conditions x 10 enrollment seeds x 4 systems = 3,400 evaluations**. It needs its own feature extraction because the blur levels are part of the feature-cache signature:
+
+```powershell
+& .\.venv\Scripts\python.exe -u -m mbproject --config configs/study_strong_blur.yaml all
+```
+
+Outputs are stored separately under `data_strong_blur/` and `results/strong_blur/`; `results/full/` is not touched. On a GTX 1650 laptop GPU the teammate's full run took about 30 minutes. The independent CPU verification reused the original raw media with a separate feature cache; its resolved configuration is saved in `results/strong_blur/config_resolved.json`.
+
+Verified results at **k = 16 with clean audio**, averaged over the ten enrollment seeds:
+
+| Blur sigma | Face HW3 EER (%) | Face interpolated EER (%) | Equal-weight fusion HW3 EER (%) | Equal-weight fusion interpolated EER (%) |
+|---|---:|---:|---:|---:|
+| 4 | 1.56 | 1.56 | 0.15 | 0.16 |
+| 6 | 9.92 | 9.89 | 0.90 | 0.90 |
+| 8 | 28.18 | 28.23 | 1.79 | 1.77 |
+
+At the frozen clean-development FAR=1% thresholds, face FRR is 82.98% at sigma 6 and 100% at sigma 8. At sigma 8, fusion FRR is 11.15%, versus 3.23% for clean voice alone. Their actual test FARs differ: 0.014% for fusion and 1.252% for voice. These are rejection rates for genuine **attempts**, not percentages of distinct users. Fusion improves EER over either input at sigma 6 and 8, but the frozen operating policies have different error trade-offs. The figures above come from the independent rerun; keep each numerical claim tied to its saved run and EER definition.
+
+### RQ3 severity curves
+
+`mbproject plots` also writes `figures/rq3_severity_curves_k{1,4,16}.png`, so the k=1 and k=4 degradation results are visible alongside the k=16 heatmaps. Each figure shows interpolated EER and FRR at the frozen clean-development FAR=1% threshold, with means and +/- one standard deviation over enrollment seeds. The panels vary audio noise with sharp faces, face blur with clean audio, and **every configured blur level with audio held at the lowest configured SNR** (0 dB in the supplied configurations). Thus the joint panel includes sigma 6 and 8 without treating audio SNR and blur sigma as equivalent scales. Percentage bands are clipped to 0-100 for display. `rq3_summary.csv` contains mean and standard deviation of interpolated EER, HW3 EER, d-prime, and operating FAR/FRR; error-rate columns are fractions.
+
+### Running on Google Colab
+
+Colab exports `MPLBACKEND=module://matplotlib_inline...`, which the project's separate Python 3.11 environment cannot load. The package now falls back to the file-only `Agg` backend in that case, so `python -m mbproject all` runs unchanged on Colab.
 
 ### RQ2 weight sweep at small enrollment sizes
 
