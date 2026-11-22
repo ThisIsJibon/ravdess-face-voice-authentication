@@ -1,0 +1,3 @@
+# Keep exact bytes for the hashed HW3 evaluator so the audit passes on Windows
+# (Git for Windows would otherwise convert it to CRLF and change its SHA-256).
+src/mbproject/vendor/hw3_evaluator.py text eol=lf

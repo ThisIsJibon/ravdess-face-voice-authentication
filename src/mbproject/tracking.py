@@ -12,14 +12,16 @@ We summarize each video (about 110 frames) into a few fixed-length vectors
 """
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import zipfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from .common import write_json
+from .common import sha256, write_json
 
 # The 17 AU intensity columns in the OpenFace CSVs.
 AU_COLUMNS = ["AU01_r", "AU02_r", "AU04_r", "AU05_r", "AU06_r", "AU07_r", "AU09_r", "AU10_r", "AU12_r",
@@ -34,8 +36,8 @@ RIGHT_EYE, LEFT_EYE = 36, 45
 # What each feature block means (also written to data/tracking/extraction.json).
 BLOCKS = {
     "au_level": "average of each AU over the video (how strong the expressions are)",
-    "au_motion": "standard deviation of each AU (how much each AU changes)",
-    "au_velocity": "average frame-to-frame change of each AU (how fast the face moves)",
+    "au_motion": "standard deviation of each AU (how much each AU varies; ignores frame order)",
+    "au_velocity": "average absolute change of each AU between consecutive frames (per frame, not per second)",
     "lmk_shape": "average of the normalized landmarks (face geometry)",
     "lmk_motion": "standard deviation of the normalized landmarks (how the face shape moves)",
     "pdm_shape": "average of OpenFace's 34 shape parameters (compact face geometry)",
@@ -59,7 +61,8 @@ def list_csv_files(source):
     """Map each CSV file name (e.g. '01-01-03-02-01-01-12.csv') to its location."""
     source = Path(source)
     if source.suffix == ".zip":
-        names = zipfile.ZipFile(source).namelist()
+        with zipfile.ZipFile(source) as archive:
+            names = archive.namelist()
     else:
         names = [str(p.relative_to(source)) for p in source.rglob("*.csv")]
     files = {}
@@ -67,6 +70,10 @@ def list_csv_files(source):
         base = Path(name).name
         # Skip folders and hidden macOS files like "__MACOSX/._name.csv".
         if base.endswith(".csv") and "__MACOSX" not in name and not base.startswith("._"):
+            # Two copies of the same file (e.g. an extra unzipped folder) would make the
+            # choice depend on listing order, so stop instead of picking one silently.
+            if base in files:
+                raise ValueError(f"Tracking file {base} appears twice: {files[base]} and {name}")
             files[base] = name
     return files
 
@@ -83,7 +90,8 @@ def read_csv(source, files, recording_id):
         raise FileNotFoundError(f"Tracking file {file_name} is missing")
     source = Path(source)
     if source.suffix == ".zip":
-        raw = zipfile.ZipFile(source).read(files[file_name])
+        with zipfile.ZipFile(source) as archive:
+            raw = archive.read(files[file_name])
     else:
         raw = (source / files[file_name]).read_bytes()
     table = pd.read_csv(io.BytesIO(raw), skipinitialspace=True)
@@ -131,6 +139,8 @@ def summarize_recording(table, min_confidence, min_frames):
     # Velocity: change between neighbouring frames. Only use pairs of frames that
     # really are next to each other (a dropped frame would make a fake jump).
     neighbours = np.diff(good.frame.to_numpy()) == 1
+    if not neighbours.any():
+        raise ValueError("No two confident frames are next to each other, so AU velocity cannot be computed")
     au_change = np.abs(np.diff(au, axis=0))[neighbours]
 
     landmarks = normalize_landmarks(good[X_COLUMNS].to_numpy(), good[Y_COLUMNS].to_numpy())
@@ -146,6 +156,47 @@ def summarize_recording(table, min_confidence, min_frames):
     }
     quality = {"frames": len(table), "kept_frames": len(good)}
     return blocks, quality
+
+
+def source_fingerprint(source):
+    """A hash of the tracking data itself, so changed CSV contents are noticed.
+
+    ZIP: hash of the whole file. Folder: hash of every CSV's relative path and
+    contents, in sorted order (so the result does not depend on listing order).
+    """
+    source = Path(source)
+    if source.is_file():
+        return sha256(source)
+    combined = hashlib.sha256()
+    for path in sorted(source.rglob("*.csv")):
+        combined.update(str(path.relative_to(source)).encode())
+        combined.update(sha256(path).encode())
+    return combined.hexdigest()
+
+
+def extraction_settings(config):
+    """Everything that changes the extracted features: the source archive, the
+    frame filters, the manifest and this file's code. Saved next to the features
+    so a later run can tell whether the saved features are out of date."""
+    source = find_tracking_source(config)
+    settings = config["tracking"]
+    return {
+        "source": source.name,
+        "source_sha256": source_fingerprint(source),
+        "min_confidence": settings["min_confidence"],
+        "min_frames": settings["min_frames"],
+        "manifest_sha256": sha256(Path(config["data_dir"]) / "manifest.csv"),
+        "code_sha256": sha256(Path(__file__)),
+    }
+
+
+def features_are_current(config):
+    """True if data/tracking/features.npz was made with the current settings."""
+    folder = Path(config["data_dir"]) / "tracking"
+    if not (folder / "features.npz").exists() or not (folder / "extraction.json").exists():
+        return False
+    saved = json.loads((folder / "extraction.json").read_text()).get("settings")
+    return saved == extraction_settings(config)
 
 
 def extract_tracking(config):
@@ -165,7 +216,11 @@ def extract_tracking(config):
     quality = []
     for count, row in enumerate(manifest.itertuples(), 1):
         table = read_csv(source, files, row.recording_id)
-        blocks, q = summarize_recording(table, settings["min_confidence"], settings["min_frames"])
+        try:
+            blocks, q = summarize_recording(table, settings["min_confidence"], settings["min_frames"])
+        except ValueError as error:
+            # Say which recording failed, so it is easy to find.
+            raise ValueError(f"Recording {row.recording_id}: {error}") from error
         for name in BLOCKS:
             features[name].append(blocks[name])
         quality.append({"recording_id": row.recording_id, **q})
@@ -183,6 +238,7 @@ def extract_tracking(config):
     quality = pd.DataFrame(quality)
     quality.to_csv(out / "quality.csv", index=False)
     write_json(out / "extraction.json", {
+        "settings": extraction_settings(config),
         "source": source.name,
         "recordings": len(manifest),
         "min_confidence": settings["min_confidence"],

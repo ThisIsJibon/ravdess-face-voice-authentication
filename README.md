@@ -1,10 +1,10 @@
 # Mobile Biometrics Final Project
 
-Python implementation of RAVDESS face + voice **identity verification** for the three approved research questions. This repository contains the experiments and a working claim-verification demo. It does not contain the final report or presentation.
+Python implementation of RAVDESS face + voice **identity verification** for the three approved research questions. This repository contains the experiments, a working claim-verification demo and the final report (`Mobile_Biometrics_Report.docx`). The presentation is not included.
 
-## Run on this computer
+## Run locally
 
-Open PowerShell in `C:\Users\jibon\AcademicWorld\Coding\MBFinalProject`.
+Open PowerShell in the repository root (the folder containing `pyproject.toml`). The commands below use repository-relative paths.
 
 ```powershell
 # Run the full pipeline. Existing valid media/features are reused.
@@ -35,6 +35,22 @@ There are **61 conditions x 10 enrollment seeds x 4 systems = 2,440 evaluations*
 
 An additional 30-seed evaluation is configured in `configs/study_30_seeds.yaml`. It includes the original ten enrollment seeds and 20 additional unique seeds, using the same dataset partitions, models, enrollment sizes, conditions, and evaluation systems.
 
+The revised submission report uses **30 enrollment seeds throughout RQ1, RQ2, RQ3 and the AU extension**. Use **HW3 EER** as the primary metric in the slides as well: clean voice at k = 1 to 16 is **7.31% to 2.21%**. The **7.32%** starting value is the supplementary interpolated ROC EER for the same 30 seeds. The earlier **7.69% to 2.22%** figures describe the original ten-seed HW3 run.
+
+`configs/study_submission_30_seeds.yaml` reproduces the submission's core, RQ2 weight sweep and tracking study. `configs/study_strong_blur_30_seeds.yaml` reproduces its full stronger-blur grid using the separate `data/strong_blur` feature cache. Verified submission outputs are `results/30_seeds/`, `results/30_seeds/rq2_weights/`, `results/tracking_30_seeds/` and `results/strong_blur_30_seeds/`. Each comparison uses the same 30 seeds; the AU controls explicitly use the first seed and their own stated actor splits.
+
+```bash
+python -m mbproject --config configs/study_submission_30_seeds.yaml evaluate
+python -m mbproject --config configs/study_submission_30_seeds.yaml rq2
+python -m mbproject --config configs/study_submission_30_seeds.yaml tracking
+python -m mbproject --config configs/study_strong_blur_30_seeds.yaml prepare
+python -m mbproject --config configs/study_strong_blur_30_seeds.yaml extract
+python -m mbproject --config configs/study_strong_blur_30_seeds.yaml evaluate
+python -m mbproject --config configs/study_strong_blur_30_seeds.yaml plots
+```
+
+Use the revised report tables for the other slide results too. For example, the 30-seed k = 4 noisy-voice comparison is **13.76% voice versus 2.01% AU + voice**. At k = 16 with 0 dB audio and sigma 4 blur, mean HW3 EER is **11.43% voice, 1.53% face and 0.76% fusion**. These are enrollment-seed means, not additional independent test recordings.
+
 The extended run contains **61 conditions x 30 enrollment seeds x 4 systems = 7,320 evaluations**.
 
 Run the extended evaluation and regenerate its figures with:
@@ -48,13 +64,61 @@ Its outputs are stored separately under `results/30_seeds/`. The original `confi
 
 The additional seeds examine variation in enrollment selection. They do not increase the number of independent test recordings: each condition still contains 480 genuine and 11,040 impostor comparisons. The original ten seeds are included in the 30-seed run, so comparisons between the two runs are overlapping rather than independent replications.
 
+### Extended RQ3 blur evaluation
+
+The original face blur conditions have 0% EER at sigma 0, 1 and 2, with errors emerging at sigma 4. An additional run in `configs/study_strong_blur.yaml` adds two heavier levels: **face blur sigma 0, 1, 2, 4, 6, 8**. Everything else (seeds, splits, models, SNR levels, enrollment sizes) is identical to `configs/study.yaml`. In the verification run, all 2,440 evaluations shared with the original run reproduced its metrics exactly.
+
+The run contains **85 conditions x 10 enrollment seeds x 4 systems = 3,400 evaluations**. It needs its own feature extraction because the blur levels are part of the feature-cache signature:
+
+```powershell
+& .\.venv\Scripts\python.exe -u -m mbproject --config configs/study_strong_blur.yaml all
+```
+
+Outputs are stored separately under `data_strong_blur/` and `results/strong_blur/`; `results/full/` is not touched. On a GTX 1650 laptop GPU the teammate's full run took about 30 minutes. The independent CPU verification reused the original raw media with a separate feature cache; its resolved configuration is saved in `results/strong_blur/config_resolved.json`.
+
+Verified results at **k = 16 with clean audio**, averaged over the ten enrollment seeds:
+
+| Blur sigma | Face HW3 EER (%) | Face interpolated EER (%) | Equal-weight fusion HW3 EER (%) | Equal-weight fusion interpolated EER (%) |
+|---|---:|---:|---:|---:|
+| 4 | 1.56 | 1.56 | 0.15 | 0.16 |
+| 6 | 9.92 | 9.89 | 0.90 | 0.90 |
+| 8 | 28.18 | 28.23 | 1.79 | 1.77 |
+
+At the frozen clean-development FAR=1% thresholds, face FRR is 82.98% at sigma 6 and 100% at sigma 8. At sigma 8, fusion FRR is 11.15%, versus 3.23% for clean voice alone. Their actual test FARs differ: 0.014% for fusion and 1.252% for voice. These are rejection rates for genuine **attempts**, not percentages of distinct users. Fusion improves EER over either input at sigma 6 and 8, but the frozen operating policies have different error trade-offs. The figures above come from the independent rerun; keep each numerical claim tied to its saved run and EER definition.
+
+### RQ3 severity curves
+
+`mbproject plots` also writes `figures/rq3_severity_curves_k{1,4,16}.png`, so the k=1 and k=4 degradation results are visible alongside the k=16 heatmaps. Each figure shows interpolated EER and FRR at the frozen clean-development FAR=1% threshold, with means and +/- one standard deviation over enrollment seeds. The panels vary audio noise with sharp faces, face blur with clean audio, and **every configured blur level with audio held at the lowest configured SNR** (0 dB in the supplied configurations). Thus the joint panel includes sigma 6 and 8 without treating audio SNR and blur sigma as equivalent scales. Percentage bands are clipped to 0-100 for display. `rq3_summary.csv` contains mean and standard deviation of interpolated EER, HW3 EER, d-prime, and operating FAR/FRR; error-rate columns are fractions.
+
+### Running on Google Colab
+
+Colab exports `MPLBACKEND=module://matplotlib_inline...`, which the project's separate Python 3.11 environment cannot load. The package now falls back to the file-only `Agg` backend in that case, so `python -m mbproject all` runs unchanged on Colab.
+
+### RQ2 weight sweep at small enrollment sizes
+
+RQ1 shows the highest errors with few enrollment recordings. This extension asks whether a better-weighted face + voice fusion helps at k = 1, 2 and 4 (clean data only). For each enrollment seed and k it:
+
+- builds templates from the same enrollment recordings as RQ1 and scores every development and test probe;
+- min-max normalizes face and voice scores using development scores only, so both modalities span the same 0-1 range before they are weighted;
+- fuses with face weights 0.0, 0.1, ..., 1.0 (0 = voice only, 1 = face only) and measures each weight on the test probes: HW3 EER, d-prime, and FRR at a development-fitted FAR = 0.1% threshold;
+- picks one tuned weight from development data only: lowest exact EER, then lowest FRR at FAR = 0.1%, then highest d-prime, then closest to 0.5. The d-prime step only decides when several weights tie on errors, for example at zero development errors. The report's original tuning chose 0.5 in all ten seeds; with face alone at zero development errors, such a tie is the likely reason.
+
+It reuses the cached embeddings (run `extract` first) and does not change the main pipeline or its results. Unlike the main pipeline, thresholds and weights are fitted separately for each k, because the question is the best fusion achievable at that size. For the same reason, the FRR column is not comparable with the main pipeline's FRR, whose thresholds are frozen at k = 16.
+
+```bash
+python -m mbproject rq2
+python -m mbproject --config configs/study_30_seeds.yaml rq2
+```
+
+Outputs go to `<results_dir>/rq2_weights/`: `rq2_table.csv` (seed means and standard deviations for voice, face, the original unnormalized 50/50 fusion, normalized 50/50 fusion and the tuned fusion at each k), `weight_sweep.csv`, `systems.csv`, `selected_weights.csv` and the figure `rq2_weight_sweep.png`. Settings are in the `rq2` block of the config. The voice, face and unnormalized 50/50 fusion rows reproduce the main pipeline's clean EER and d-prime at the same k exactly, because they use identical scores and neither metric depends on the threshold. The normalized sweep's 0 and 1 weights can differ slightly from the voice-only and face-only rows (see `docs/EXPERIMENT_PROTOCOL.md`).
+
 ## Data and protocol
 
 - 24 actors, 60 speech recordings each: **1,440 naturally paired audio/video recordings**. Identity and every stimulus field must match across modalities. Song is excluded to keep all actors equally represented. Duplicate video-only encodings are excluded.
 - Each actor: **20 enrollment-pool, 20 development, 20 test recordings**. The two repetitions of each stimulus group stay together. A stimulus group is channel/emotion/intensity/statement, shared across actors. Group assignment is fixed using seed 73.
 - Each test condition: **480 genuine and 11,040 impostor trials**. Every probe claims each of the 24 enrolled identities; the own-actor claim is genuine, other claims are impostors. Face and voice use the same probe and claimed actor on every fusion trial.
 - All sampled frames of a recording are pooled into **one recording embedding**. Frames are never counted as independent enrollment samples or independent tests.
-- Frozen pretrained identity encoders: SpeechBrain ECAPA-TDNN (192 dimensions) for voice and OpenCV SFace (128 dimensions) with YuNet detection/alignment for face. No RAVDESS fine-tuning or test-dependent feature selection. Expression action units are not used as identity features.
+- Frozen pretrained identity encoders: SpeechBrain ECAPA-TDNN (192 dimensions) for voice and OpenCV SFace (128 dimensions) with YuNet detection/alignment for face. No RAVDESS fine-tuning or test-dependent feature selection. The main pipeline does not use expression action units as identity features; the separate facial-tracking study below tests them as an alternative face representation.
 - A template is the L2-normalized average of the selected clean recording embeddings. Prefixes of a saved random order make enrollment subsets nested. The same ordering is used for both modalities when their enrollment counts match.
 - Matching is cosine similarity, mapped by `(cosine + 1) / 2` into [0, 1] using a fixed theoretical transformation. A higher score means stronger evidence for a match. Fixed fusion uses 50% face and 50% voice. Tuned fusion selects a face weight from 0.1 through 0.9, using reference-enrollment development EER, then development FRR at FAR 1%, with ties preferring weights near 0.5.
 - Every system's decision thresholds and fusion weight are fitted at **16 clean enrollment recordings**, separately for each enrollment seed, then frozen for all enrollment sizes and degradation levels. This keeps the enrollment comparison from also changing calibration.
@@ -123,7 +187,7 @@ The supplied instructor feedback approves RAVDESS. Use is educational and local;
 
 ## Facial-tracking study (action units and landmarks)
 
-An additional study tests the RAVDESS facial-tracking release (OpenFace action units and landmarks) for authentication, using the same splits, trials and metrics. After `all`, put `FacialTracking_Actors_01-24.zip` in `RAVDESS/` and run `python -m mbproject tracking`. Method and results: [docs/TRACKING_STUDY.md](docs/TRACKING_STUDY.md).
+An additional study tests the RAVDESS facial-tracking release (OpenFace action units and landmarks) as an alternative feature representation of the face, alone and fused with voice and SFace, using the same splits, trials and metrics. After `all`, put `FacialTracking_Actors_01-24.zip` in `RAVDESS/` and run `python -m mbproject tracking`. Method and results: [docs/TRACKING_STUDY.md](docs/TRACKING_STUDY.md).
 
 For cloning, dataset placement, installation on another machine, and team branches, see [TEAM_SETUP.md](TEAM_SETUP.md).
 

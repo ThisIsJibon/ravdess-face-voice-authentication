@@ -65,6 +65,7 @@ def main():
     extract_parser.add_argument("--limit",type=int,help="Extraction smoke test only; cannot evaluate an incomplete dataset")
     t = sub.add_parser("tracking",help="Facial-tracking (AU + landmark) study; run after 'all'")
     t.add_argument("--refresh",action="store_true",help="Re-extract tracking features from the archive")
+    sub.add_parser("rq2",help="RQ2 face/voice weight sweep at small clean enrollment sizes; run after 'extract'")
     v = sub.add_parser("verify")
     v.add_argument("--recording",help="Held-out recording identifier from data/manifest.csv")
     v.add_argument("--audio",help="External WAV probe (use with --video)")
@@ -102,6 +103,9 @@ def main():
         if args.refresh:
             extract_tracking(config)
         run_tracking(config)
+    if args.command == "rq2":
+        from .rq2_weights import run_rq2
+        run_rq2(config)
     if args.command == "verify":
         if bool(args.recording) == bool(args.audio and args.video):
             parser.error("Provide either --recording or both --audio and --video")

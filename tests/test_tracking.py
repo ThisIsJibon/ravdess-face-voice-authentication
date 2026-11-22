@@ -1,10 +1,18 @@
 """Tests for the facial-tracking study (no real data needed)."""
+import json
+import zipfile
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from mbproject.tracking import AU_COLUMNS, SHAPE_COLUMNS, X_COLUMNS, Y_COLUMNS, normalize_landmarks, summarize_recording
-from mbproject.tracking_eval import Embedding, check_trial_index
+from mbproject.tracking import (AU_COLUMNS, SHAPE_COLUMNS, X_COLUMNS, Y_COLUMNS, extraction_settings,
+                                features_are_current, list_csv_files, normalize_landmarks, read_csv,
+                                summarize_recording)
+from mbproject import tracking_report
+from mbproject.tracking_eval import (Embedding, check_main_run, check_trial_index, finish_run, run_tracking,
+                                     save_plot_scores, score_matrix)
+from mbproject.tracking_report import eer_method_note, plot_example_scores
 
 
 def fake_tracking_csv(frames=40, confidence=0.95, seed=0):
@@ -49,6 +57,15 @@ def test_too_few_good_frames_raises_an_error():
         summarize_recording(fake_tracking_csv(confidence=0.5), min_confidence=0.8, min_frames=10)
 
 
+def test_no_consecutive_good_frames_raises_a_clear_error():
+    # Every other frame is low confidence: enough good frames, but none are neighbours,
+    # so AU velocity would be the mean of nothing (NaN).
+    table = fake_tracking_csv()
+    table.loc[1::2, "confidence"] = 0.1
+    with pytest.raises(ValueError, match="next to each other"):
+        summarize_recording(table, min_confidence=0.8, min_frames=10)
+
+
 def test_embedding_only_learns_from_training_data():
     rng = np.random.default_rng(2)
     X = rng.normal(size=(120, 10))
@@ -76,3 +93,153 @@ def test_misordered_trial_index_stops_the_run(tmp_path):
              claim_actors=actors, genuine=genuine[[1, 0, 2]])
     with pytest.raises(ValueError):
         check_trial_index(path, probes, actors, genuine)
+
+
+def test_saved_example_scores_produce_all_plots(tmp_path):
+    # Save example scores the way run_tracking does, then draw the report plots from them.
+    genuine = np.eye(24, dtype=bool).repeat(20, axis=0)          # 480 probes x 24 claimed actors
+    rng = np.random.default_rng(0)
+    # Genuine scores a bit higher than impostor scores, like a working system.
+    scores = {name: np.clip(rng.normal(0.5, 0.1, genuine.shape) + 0.3 * genuine, 0, 1)
+              for name in ["face", "voice", "au", "au+voice", "tracking"]}
+    save_plot_scores(tmp_path / "plot_scores.npz", genuine, scores)
+    figures = tmp_path / "figures"
+    figures.mkdir()
+    plot_example_scores(tmp_path / "plot_scores.npz", figures, seed=73, reference_k=16, best_label="PDM shape")
+    expected = ["score_distributions.png", "roc_det.png"] + [
+        f"hw3_original/{kind}_({system}).png" for system in ["au", "au+voice"]
+        for kind in ["score_distribution_plot", "det_curve", "roc_curve"]]
+    for name in expected:
+        assert (figures / name).is_file(), f"missing {name}"
+
+
+def test_plot_scores_with_the_wrong_shape_are_rejected(tmp_path):
+    # A score matrix that does not line up with the labels must stop the run.
+    genuine = np.eye(3, dtype=bool)
+    with pytest.raises(ValueError):
+        save_plot_scores(tmp_path / "plot_scores.npz", genuine, {"au": np.zeros((2, 3))})
+
+
+def fake_tracking_config(tmp_path):
+    """A config with a fake tracking archive and manifest, enough to describe an extraction."""
+    (tmp_path / "RAVDESS").mkdir()
+    (tmp_path / "RAVDESS" / "Tracking.zip").write_bytes(b"fake archive")
+    (tmp_path / "data" / "tracking").mkdir(parents=True)
+    (tmp_path / "data" / "manifest.csv").write_text("recording_id\n01\n")
+    (tmp_path / "data" / "tracking" / "features.npz").write_bytes(b"")
+    return {"dataset_dir": str(tmp_path / "RAVDESS"), "data_dir": str(tmp_path / "data"),
+            "tracking": {"archive": "Tracking", "min_confidence": 0.8, "min_frames": 10}}
+
+
+def test_saved_features_are_out_of_date_when_settings_change(tmp_path):
+    config = fake_tracking_config(tmp_path)
+    saved = tmp_path / "data" / "tracking" / "extraction.json"
+    saved.write_text(json.dumps({"settings": extraction_settings(config)}))
+    assert features_are_current(config)
+    config["tracking"]["min_confidence"] = 0.95          # a changed setting must force re-extraction
+    assert not features_are_current(config)
+    config["tracking"]["min_confidence"] = 0.8
+    (tmp_path / "data" / "manifest.csv").write_text("recording_id\n02\n")   # so must a changed manifest
+    assert not features_are_current(config)
+
+
+def test_main_run_with_different_settings_stops_the_run(tmp_path):
+    config = {"enrollment_seeds": [73], "enrollment_sizes": [1, 4, 16], "degradation_enrollment_sizes": [4],
+              "audio_snr_db": [None, 0], "split_seed": 73}
+    with pytest.raises(FileNotFoundError):                # main run not finished yet
+        check_main_run(tmp_path, config)
+    (tmp_path / "run_complete.json").write_text(json.dumps({"status": "complete"}))
+    (tmp_path / "config_resolved.json").write_text(json.dumps(config))
+    check_main_run(tmp_path, config)                      # same settings: fine
+    changed = {**config, "enrollment_sizes": [1, 4, 8]}  # e.g. main scores at k = 16, tracking at k = 8
+    with pytest.raises(ValueError, match="enrollment_sizes"):
+        check_main_run(tmp_path, changed)
+
+
+def test_changed_zip_contents_of_the_same_size_are_noticed(tmp_path):
+    config = fake_tracking_config(tmp_path)
+    (tmp_path / "data" / "tracking" / "extraction.json").write_text(json.dumps({"settings": extraction_settings(config)}))
+    assert features_are_current(config)
+    (tmp_path / "RAVDESS" / "Tracking.zip").write_bytes(b"FAKE ARCHIVE")      # same size, new contents
+    assert not features_are_current(config)
+
+
+def test_changed_csv_in_an_extracted_folder_is_noticed(tmp_path):
+    config = fake_tracking_config(tmp_path)
+    (tmp_path / "RAVDESS" / "Tracking.zip").unlink()                         # use a folder instead of a ZIP
+    folder = tmp_path / "RAVDESS" / "Tracking" / "Actor_01"
+    folder.mkdir(parents=True)
+    (folder / "01-01-01-01-01-01-01.csv").write_text("frame,confidence\n1,0.9\n")
+    (tmp_path / "data" / "tracking" / "extraction.json").write_text(json.dumps({"settings": extraction_settings(config)}))
+    assert features_are_current(config)
+    (folder / "01-01-01-01-01-01-01.csv").write_text("frame,confidence\n1,0.5\n")
+    assert not features_are_current(config)
+
+
+def test_eer_note_reports_the_real_gap_between_methods():
+    # HW3 says 10%, the exact ROC EER says 2%: the note must say 8.00 points, not "they agree".
+    summary = pd.DataFrame({"representation": ["lda"], "k": [4], "hw3_eer_mean": [0.10], "eer_mean": [0.02]})
+    fusion = pd.DataFrame({"k": [4], "audio_snr_db": ["clean"], "hw3_eer_mean": [0.03], "eer_mean": [0.03]})
+    note = eer_method_note(summary, fusion, 4)
+    assert "8.00 percentage points" in note
+    assert "agree" not in note
+
+
+def test_tracking_csv_is_found_by_recording_id_and_mac_files_are_skipped(tmp_path):
+    # Recording "01-03-02-01-01-12" must read tracking file "01-01-03-02-01-01-12.csv"
+    # (leading "01" = audio+video). macOS "._" copies in __MACOSX must be ignored.
+    archive = tmp_path / "Tracking.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("Actor_12/01-01-03-02-01-01-12.csv", "frame, confidence\n1, 0.9\n")
+        z.writestr("__MACOSX/Actor_12/._01-01-03-02-01-01-12.csv", "junk")
+    files = list_csv_files(archive)
+    assert files == {"01-01-03-02-01-01-12.csv": "Actor_12/01-01-03-02-01-01-12.csv"}
+    table = read_csv(archive, files, "01-03-02-01-01-12")
+    assert list(table.columns) == ["frame", "confidence"]        # spaces after commas removed
+    with pytest.raises(FileNotFoundError):
+        read_csv(archive, files, "01-03-02-01-01-13")
+
+
+def test_template_uses_the_first_k_enrollment_recordings():
+    # Same rule as the main study: template = normalized mean of the first k recordings
+    # in the seed's enrollment order; score = (cosine + 1) / 2.
+    embeddings = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [-1.0, 0.0]])
+    row_of = {"a": 0, "b": 1, "probe": 2, "far": 3}
+    orders = {1: ["a", "b"]}
+    k1 = score_matrix(embeddings, row_of, ["probe"], orders, k=1)     # template = [1, 0]
+    k2 = score_matrix(embeddings, row_of, ["probe"], orders, k=2)     # template = [1, 1] / sqrt(2)
+    assert np.isclose(k1[0, 0], (np.cos(np.pi / 4) + 1) / 2)
+    assert np.isclose(k2[0, 0], 1.0)
+    assert np.isclose(score_matrix(embeddings, row_of, ["far"], orders, k=1)[0, 0], 0.0)
+
+
+def test_failed_rerun_removes_the_old_complete_marker(tmp_path):
+    # A finished run left run_complete.json behind. A new run that fails early
+    # (here: no manifest) must not leave that old marker next to its outputs.
+    out = tmp_path / "results"
+    out.mkdir()
+    (out / "run_complete.json").write_text('{"status": "complete"}')
+    config = {"data_dir": str(tmp_path / "data"), "results_dir": str(tmp_path / "full"),
+              "tracking": {"output_dir": str(out)}}
+    with pytest.raises(FileNotFoundError):
+        run_tracking(config)
+    assert not (out / "run_complete.json").exists()
+
+
+def test_run_is_not_marked_complete_if_the_report_fails(tmp_path, monkeypatch):
+    def broken_report(config, info):
+        raise RuntimeError("figure could not be drawn")
+    monkeypatch.setattr(tracking_report, "write_report", broken_report)
+    with pytest.raises(RuntimeError):
+        finish_run({}, tmp_path, {"status": "complete"})
+    assert not (tmp_path / "run_complete.json").exists()
+
+
+def test_duplicate_tracking_files_stop_the_run(tmp_path):
+    # The same recording in two folders: which one is used must not depend on listing order.
+    archive = tmp_path / "Tracking.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("Actor_12/01-01-03-02-01-01-12.csv", "frame\n1\n")
+        z.writestr("copy/Actor_12/01-01-03-02-01-01-12.csv", "frame\n2\n")
+    with pytest.raises(ValueError, match="appears twice"):
+        list_csv_files(archive)
