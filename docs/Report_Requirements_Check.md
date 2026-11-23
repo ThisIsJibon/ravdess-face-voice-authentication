@@ -1,6 +1,6 @@
 # Report requirements check
 
-Reviewed November 21, 2026 against **Project Description v2.pdf** (updated November 15) and **CAP6101_Report_Rubric.pdf** supplied by the user. This check applies to the revised root file `Mobile_Biometrics_Report.docx` and supersedes the earlier report checklist.
+Reviewed November 22, 2026 against **Project Description v2.pdf** (updated November 15) and **CAP6101_Report_Rubric.pdf** supplied by the user. This check applies to the revised root file `Mobile_Biometrics_Report.docx` and supersedes the earlier report checklist.
 
 The rendered report has **five content pages and one separate reference page**. All six page images were visually inspected. **173 numerical checks passed**, recomputing table entries and principal narrative results from saved experiment outputs. This is a requirements review, not an instructor-assigned grade or a Turnitin assessment.
 
@@ -37,12 +37,16 @@ The rendered report has **five content pages and one separate reference page**. 
 
 Local verification artifacts, excluded from Git:
 
-- `results/verification/report_30_seeds/submission_verification.json`: report hash, page count and structural checks.
-- `results/verification/report_30_seeds/submission_numeric_checks.csv`: all 173 numerical checks.
-- `results/verification/report_30_seeds/final_render/`: internal QA PDF and page PNGs.
-- `results/verification/report_30_seeds/Mobile_Biometrics_Report_before_30_seed_revision.docx`: original backup.
-- `results/verification/report_30_seeds/build_report.py` and `verify_submission_report.py`: revision and verification scripts.
+- `results/verification/submission_review_nov22/submission_verification.json`: current report hash, page count and structural checks.
+- `results/verification/submission_review_nov22/submission_numeric_checks.csv`: all 173 numerical checks.
+- `results/verification/submission_review_nov22/report_render/`: current internal QA PDF and page PNGs.
+- `results/verification/submission_review_nov22/before_Mobile_Biometrics_Report.docx`: backup of the user's latest report before this review.
+- `results/verification/submission_review_nov22/build_reviewed_report.py` and `verify_reviewed_report.py`: revision and verification scripts.
 
 Scientific claims were checked against `results/30_seeds`, `results/30_seeds/rq2_weights`, `results/strong_blur_30_seeds` and `results/tracking_30_seeds`. Rendering used the packaged document renderer with an isolated temporary runtime and LibreOffice 26.8.3.1; native Word automation was unavailable. QA images/PDF are internal artifacts; the deliverable is the root Word report.
 
 The 30-seed revision replaces all numerical result tables and related discussion using fresh extension reruns. It explicitly distinguishes HW3 EER (7.31% to 2.21% for clean voice) from interpolated EER (7.32% to 2.21%). All 69 tests and both 25-check run audits passed. The main 2,440 and strong-blur 3,400 legacy rows exactly match their corresponding rows in the larger runs; the 270 RQ2 baseline rows reproduce the main study. Evidence is in `results/verification/report_30_seeds/run_consistency.json`.
+
+The November 22 review checked the latest user-edited report and deck. It corrected a clean voice result labeled as 0 dB, AU control EERs described as accuracy, the explanation of how the 90/10 weight was selected, and statements that overstated fusion's benefit. The report retains the independent-modality enrollment comparison and AU operating-point results. Repeated analysis was shortened to keep five content pages. The test suite and both 25-check audits passed again; the current logs are in `results/verification/submission_review_nov22/`.
+
+The reviewed presentation is `output/Group 2 Presentation Submission.pptx`. It has 16 slides, with a new methodology diagram on slide 4, after the dataset slide. Four clicks reveal the split, feature extraction, template matching, and fusion/evaluation stages. The diagram uses editable shapes and native fade animations. The RQ1 and RQ3 replacement charts are editable and contain embedded workbooks populated from the verified 30-seed results. All 16 slide previews were inspected, and package, slide geometry, and chart/workbook checks passed. An Office-format import retained four click-triggered fades. Native PowerPoint Slide Show playback could not be tested here. The original root presentation is retained, and both source files have private backups in the review folder.
