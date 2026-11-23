@@ -2,24 +2,186 @@
 
 Python implementation of RAVDESS face + voice **identity verification** for the three approved research questions. This repository contains the experiments, a working claim-verification demo and the final report (`Mobile_Biometrics_Report.docx`). The presentation is not included.
 
-## Run locally
+## Run the whole project step by step
 
-Open PowerShell in the repository root (the folder containing `pyproject.toml`). The commands below use repository-relative paths.
+Use **Python 3.11**. Run commands from the repository root, which contains `pyproject.toml`. All paths below are relative to that folder. The submission uses **30 enrollment seeds**; commands without `--config` use the older ten-seed study instead.
 
-```powershell
-# Run the full pipeline. Existing valid media/features are reused.
-& .\.venv\Scripts\python.exe -u -m mbproject all
+### 1. Get the source
 
-# Run implementation tests and the completed-study integrity audit.
-& .\.venv\Scripts\python.exe -m pytest -q
-& .\.venv\Scripts\python.exe -m mbproject audit
-
-# Re-evaluate cached embeddings or regenerate figures without inference.
-& .\.venv\Scripts\python.exe -m mbproject evaluate
-& .\.venv\Scripts\python.exe -m mbproject plots
+```bash
+git clone https://github.com/ThisIsJibon/ravdess-face-voice-authentication.git
+cd ravdess-face-voice-authentication
 ```
 
-On another machine, install **Python 3.11**, copy the original `RAVDESS` speech archives into this folder, then run `scripts/setup.ps1`. Use `scripts/setup.ps1 -Cpu` on a computer without a suitable NVIDIA GPU. The setup creates an isolated `.venv`; it does not replace global Python packages. The full original song dataset can remain in `RAVDESS` but is not used. Model downloads are automatic and pinned to specific upstream revisions. Internet is needed only for setup and first model download. The experiments run locally.
+If you already have the repository, open a terminal in its root and continue below. You can also download and extract the source ZIP from GitHub. A source ZIP does not support Git commands.
+
+### 2. Put the dataset archives in place
+
+Download the speech archives from [official RAVDESS](https://doi.org/10.5281/zenodo.1188976). Download facial tracking from the [separate tracking release](https://doi.org/10.5281/zenodo.3255102) for the AU study. Keep the files zipped:
+
+```text
+ravdess-face-voice-authentication/
+  pyproject.toml
+  RAVDESS/
+    Audio_Speech_Actors_01-24.zip
+    Video_Speech_Actor_01.zip
+    Video_Speech_Actor_02.zip
+    ...
+    Video_Speech_Actor_24.zip
+    FacialTracking_Actors_01-24.zip
+```
+
+The core experiment needs the audio archive and **all 24 video speech archives**. The tracking command also needs the tracking archive. Song archives are unused. Do not extract the archives manually; `prepare` extracts the paired speech clips. Allow space for the original archives, two extracted media/cache directories, models, the environment and generated results. The stronger-blur run has a separate data directory and can extract another copy of the media.
+
+### 3. Install and activate an environment
+
+Choose the instructions for your OS. Installation and the first model download need internet access. The experiments process biometric data locally.
+
+**Windows PowerShell, CPU:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1 -Cpu
+.\.venv\Scripts\Activate.ps1
+python --version
+```
+
+For a compatible NVIDIA GPU and driver, omit `-Cpu` to install the script's CUDA 12.8 build. If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in that terminal, then activate again. This policy change lasts for that process. You can also skip activation and replace every `python` below with `& .\.venv\Scripts\python.exe`.
+
+**macOS, CPU:**
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install torch==2.7.1 torchaudio==2.7.1
+python -m pip install -e . pytest==8.3.5
+python -m pip check
+```
+
+**Linux, CPU:**
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -e . pytest==8.3.5
+python -m pip check
+```
+
+Do not copy another computer's `.venv` or install the Windows CUDA `requirements-lock.txt` on macOS/Linux. Reopen the environment with the activation command whenever you open a new terminal. On macOS/Linux, `.venv/bin/python` also works without activation.
+
+### 4. Check the installation
+
+After activation, these commands work in PowerShell and macOS/Linux shells:
+
+```bash
+python --version
+python -m pip check
+python -m mbproject --help
+python -m pytest -q
+```
+
+Confirm Python reports **3.11.x**. The tests check the implementation; they do not run the complete dataset experiment.
+
+### 5. Run the 30-seed core study
+
+```bash
+python -u -m mbproject --config configs/study_submission_30_seeds.yaml all
+```
+
+`all` runs `prepare`, `extract`, `evaluate`, `plots` and `audit`, in that order. Extraction downloads the pinned models when needed. The run covers RQ1, the original RQ2 fusion comparison and the original RQ3 noise/blur grid. It reuses valid existing media and feature caches. It does **not** run the separate `rq2` or `tracking` commands.
+
+To run the core stages separately, use this sequence **instead of** `all`:
+
+```bash
+python -m mbproject --config configs/study_submission_30_seeds.yaml prepare
+python -m mbproject --config configs/study_submission_30_seeds.yaml models
+python -u -m mbproject --config configs/study_submission_30_seeds.yaml extract
+python -m mbproject --config configs/study_submission_30_seeds.yaml evaluate
+python -m mbproject --config configs/study_submission_30_seeds.yaml plots
+python -m mbproject --config configs/study_submission_30_seeds.yaml audit
+```
+
+Keep `--config` **before** the stage name. `models` pre-downloads the encoders; extraction also downloads them automatically if missing. A first run includes neural inference and can take much longer than re-evaluating cached features. Duration depends on hardware and disk speed.
+
+### 6. Run the RQ2 normalization and weight study
+
+After the core study:
+
+```bash
+python -m mbproject --config configs/study_submission_30_seeds.yaml rq2
+```
+
+This compares raw 50/50, normalized 50/50 and development-tuned normalized fusion at k = 1, 2 and 4. The sweep includes endpoint weights 0 and 1 as references; tuning selects among mixed weights 0.1 through 0.9. It writes `results/30_seeds/rq2_weights/`, including `rq2_table.csv`, `selected_weights.csv`, `systems.csv`, `rq2_weight_sweep.png` and `rq2_complete.json`. Test data does not select weights or thresholds.
+
+### 7. Run the AU and landmark study
+
+After the core study and with the tracking ZIP in `RAVDESS/`:
+
+```bash
+python -m mbproject --config configs/study_submission_30_seeds.yaml tracking
+```
+
+This uses supplied OpenFace tracking as another facial representation, with the same enrollment seeds, partitions and trials. Start with `results/tracking_30_seeds/REPORT.md`, its CSV tables and figures. See [the tracking study](docs/TRACKING_STUDY.md) for feature definitions and controls.
+
+### 8. Run the stronger-blur RQ3 study
+
+```bash
+python -u -m mbproject --config configs/study_strong_blur_30_seeds.yaml all
+```
+
+This adds sigma 6 and 8, using `data/strong_blur/` for media/features and `results/strong_blur_30_seeds/` for results. It keeps the same 30 enrollment seeds and original fixed fusion policy. It does not use the clean-only RQ2 extension's selected weight. A separate cache is required because blur levels affect the feature signature.
+
+### 9. Confirm completion and read the outputs
+
+```bash
+python -m mbproject --config configs/study_submission_30_seeds.yaml audit
+python -m mbproject --config configs/study_strong_blur_30_seeds.yaml audit
+```
+
+Both audits should report `"passed": true`. Check these locations:
+
+| Run | Files to read first |
+|---|---|
+| Core: `results/30_seeds/` | `run_complete.json`, `audit.json`, `summary.csv`, `metrics.csv`, `figures/` |
+| RQ2: `results/30_seeds/rq2_weights/` | `rq2_complete.json`, `rq2_table.csv`, `selected_weights.csv`, `rq2_weight_sweep.png` |
+| AU: `results/tracking_30_seeds/` | `run_complete.json`, `REPORT.md`, `summary.csv`, `fusion_summary.csv`, `controls.csv`, `figures/` |
+| Strong blur: `results/strong_blur_30_seeds/` | `run_complete.json`, `audit.json`, `rq3_summary.csv`, `figures/` |
+
+Completion markers must belong to the current configuration; incomplete extraction is not a completed experiment. Use `hw3_eer` for the primary EER in the report. CSV error rates are fractions unless the column name explicitly indicates percent; multiply fractions by 100 for percentages. `eer` is supplementary interpolated ROC EER. Thirty seeds vary enrollment selection, not the number of independent test recordings.
+
+### 10. Try a genuine and impostor claim
+
+After the core run, print a held-out actor 1 recording ID:
+
+```bash
+python -c "import pandas as pd; f=pd.read_csv('data/manifest.csv'); print(f.loc[(f.split == 'test') & (f.actor == 1), ['recording_id', 'actor']].head().to_string(index=False))"
+```
+
+Replace `RECORDING_ID` below with one printed value:
+
+```bash
+python -m mbproject --config configs/study_submission_30_seeds.yaml verify --recording RECORDING_ID --claim 1
+python -m mbproject --config configs/study_submission_30_seeds.yaml verify --recording RECORDING_ID --claim 2
+python -m mbproject --config configs/study_submission_30_seeds.yaml verify --recording RECORDING_ID --claim 1 --snr 0 --sigma 4
+```
+
+The first claim uses the true actor; the second claims a different actor. The output contains scores, the saved development threshold and an ACCEPT/REJECT decision. Genuine claims can still be rejected and impostor claims can be accepted. This is a research demo without replay or liveness protection.
+
+### Troubleshooting and reruns
+
+- **`No module named mbproject`:** activate this repository's environment and run `python -m pip install -e .`.
+- **`No module named pip`:** the environment was created without pip. Run `python -m ensurepip --upgrade`, then repeat the package installation steps for your OS.
+- **Missing archives:** check the exact filenames in step 2 and keep all archives inside the root `RAVDESS/` folder.
+- **No feature cache:** run `prepare` and `extract` with the same configuration before `evaluate` or `rq2`; run the core `all` before `tracking`.
+- **Stale cache/signature mismatch:** use the original code/configuration for the old cache, or a separate `data_dir` and `results_dir` for changed extraction settings. Preserve existing results before deliberately replacing them.
+- **Interrupted extraction:** rerun the same `all` or `extract` command to reuse valid cached recordings. Rerun later stages after extraction completes; do not treat a partial run as final results.
+- **Only need new tables or plots:** use `evaluate` or `plots` with the matching `--config`; these reuse complete cached features/results respectively. Evaluation and plotting replace generated outputs in that run's results directory.
+- **GPU unavailable:** use the CPU installation. The supplied configurations use `device: auto`; CPU extraction can be slower.
+- **Sharing results:** `.gitignore` excludes archives, environments, data, models, results, `output/` and presentations. A Git push does not upload ignored local deliverables. An already tracked report remains tracked even if an ignore rule names it.
+
+The sections below describe the protocol and legacy ten-seed comparisons. Use the explicit 30-seed commands above to reproduce the submission.
 
 ## What is implemented
 
